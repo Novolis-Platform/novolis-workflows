@@ -1,0 +1,7 @@
+name: restore
+description: dotnet restore
+runs:
+  using: composite
+  steps:
+    - run: dotnet restore
+      shell: bash

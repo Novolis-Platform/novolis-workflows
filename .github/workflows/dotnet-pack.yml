@@ -1,0 +1,18 @@
+name: dotnet-pack
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      - uses: Novolis-Platform/novolis-workflows/actions/restore@main
+      - uses: Novolis-Platform/novolis-workflows/actions/build@main
+      - uses: Novolis-Platform/novolis-workflows/actions/pack@main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts/packages/**/*.nupkg

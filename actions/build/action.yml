@@ -1,0 +1,7 @@
+name: build
+description: dotnet build
+runs:
+  using: composite
+  steps:
+    - run: dotnet build --no-restore -c Release
+      shell: bash

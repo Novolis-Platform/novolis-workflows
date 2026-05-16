@@ -1,0 +1,25 @@
+name: dotnet-publish-nuget
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: false
+        type: string
+        default: nuget.org
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      - uses: Novolis-Platform/novolis-workflows/actions/restore@main
+      - uses: Novolis-Platform/novolis-workflows/actions/build@main
+      - uses: Novolis-Platform/novolis-workflows/actions/pack@main
+      - uses: Novolis-Platform/novolis-workflows/actions/detect-changes@main
+        id: changes
+      - uses: Novolis-Platform/novolis-workflows/actions/publish-nuget@main
+        if: steps.changes.outputs.should_publish == 'true'

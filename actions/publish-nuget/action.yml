@@ -1,0 +1,7 @@
+name: publish-nuget
+description: Publish packages to NuGet via OIDC
+runs:
+  using: composite
+  steps:
+    - run: dotnet nuget push artifacts/packages/*.nupkg --source https://api.nuget.org/v3/index.json --api-key NONE --skip-duplicate
+      shell: bash

@@ -1,0 +1,15 @@
+name: registry-pr
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate registry schema
+        run: |
+          if [ -f schemas/package.schema.json ]; then
+            echo "Schema present; add ajv validation when registry grows."
+          fi

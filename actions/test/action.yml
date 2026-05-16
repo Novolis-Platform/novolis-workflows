@@ -1,0 +1,7 @@
+name: test
+description: dotnet test
+runs:
+  using: composite
+  steps:
+    - run: dotnet test --no-build -c Release --verbosity normal
+      shell: bash

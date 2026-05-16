@@ -1,0 +1,9 @@
+name: pack
+description: dotnet pack
+runs:
+  using: composite
+  steps:
+    - run: |
+        mkdir -p artifacts/packages
+        dotnet pack --no-build -c Release -o artifacts/packages
+      shell: bash
