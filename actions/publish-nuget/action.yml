@@ -1,7 +1,17 @@
 name: publish-nuget
-description: Publish packages to NuGet via OIDC
+description: Publish packages to NuGet via trusted publishing (OIDC)
+inputs:
+  nuget-username:
+    description: nuget.org profile name (not email). Set repository variable NUGET_USERNAME.
+    required: true
 runs:
   using: composite
   steps:
-    - run: dotnet nuget push artifacts/packages/*.nupkg --source https://api.nuget.org/v3/index.json --api-key NONE --skip-duplicate
+    - name: NuGet login (OIDC)
+      uses: NuGet/login@v1
+      id: login
+      with:
+        user: ${{ inputs.nuget-username }}
+    - name: Push packages
+      run: dotnet nuget push artifacts/packages/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
       shell: bash
