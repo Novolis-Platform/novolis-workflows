@@ -6,9 +6,6 @@ on:
         required: false
         type: string
         default: '9.0.x'
-    secrets:
-      inherit
-
 permissions:
   contents: read
 
