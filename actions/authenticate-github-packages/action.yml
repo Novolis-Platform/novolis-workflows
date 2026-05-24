@@ -5,6 +5,8 @@ runs:
   steps:
     - name: Authenticate to GitHub Packages
       shell: bash
+      env:
+        GPR_URL: https://nuget.pkg.github.com/Novolis-Platform/index.json
       run: |
         set -euo pipefail
         cfg=""
@@ -15,7 +17,9 @@ runs:
           echo "No nuget.config; skipping GitHub Packages auth."
           exit 0
         fi
-        dotnet nuget update source github \
+        dotnet nuget remove source github --configfile "$cfg" >/dev/null 2>&1 || true
+        dotnet nuget add source "$GPR_URL" \
+          --name github \
           --username "${{ github.actor }}" \
           --password "${{ github.token }}" \
           --store-password-in-clear-text \
