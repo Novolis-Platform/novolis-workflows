@@ -46,7 +46,7 @@ Merge adds `permissions` and `skip_publish`. Release passes only `NUGET_API_KEY`
 - **Merge** → `https://nuget.pkg.github.com/Novolis-Platform/index.json` (`packages: write`)
 - **Release** → nuget.org + `.nupkg` on the GitHub Release
 
-Public `Novolis.*` packages restore without `NOVOLIS_GPR_TOKEN`. Pass `packages_token` to `dotnet-build` only if a repo needs private cross-repo restore.
+Cross-repo `Novolis.*` restore uses `GITHUB_TOKEN` (`packages: read` on PR jobs, `packages: write` on merge). Pass `packages_token` to `dotnet-build` / `raylib-build-test` only when a PAT with `read:packages` is required.
 
 ## Scaffold
 

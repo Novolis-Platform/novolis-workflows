@@ -1,8 +1,8 @@
 name: authenticate-github-packages
-description: Add GitHub Packages feed; optional token for cross-repo restore (public packages work without auth)
+description: Add GitHub Packages feed authenticated with GITHUB_TOKEN (or an optional read:packages PAT)
 inputs:
   token:
-    description: PAT or token with read:packages for cross-repo Novolis.* restore (optional)
+    description: PAT or token with read:packages; defaults to github.token when empty
     required: false
     default: ''
 runs:
@@ -12,7 +12,6 @@ runs:
       shell: bash
       env:
         GPR_URL: https://nuget.pkg.github.com/Novolis-Platform/index.json
-        GPR_TOKEN: ${{ inputs.token != '' && inputs.token || github.token }}
       run: |
         set -euo pipefail
         cfg=""
@@ -23,17 +22,18 @@ runs:
           echo "No nuget.config; skipping."
           exit 0
         fi
-        dotnet nuget remove source github --configfile "$cfg" >/dev/null 2>&1 || true
-        if [ -n "${GPR_TOKEN:-}" ]; then
-          dotnet nuget add source "$GPR_URL" \
-            --name github \
-            --username "x-access-token" \
-            --password "$GPR_TOKEN" \
-            --store-password-in-clear-text \
-            --configfile "$cfg"
-        else
-          echo "No GPR read token; using anonymous access (public Novolis packages)."
-          dotnet nuget add source "$GPR_URL" \
-            --name github \
-            --configfile "$cfg"
+        gpr_token='${{ inputs.token }}'
+        if [ -z "$gpr_token" ]; then
+          gpr_token='${{ github.token }}'
         fi
+        if [ -z "$gpr_token" ]; then
+          echo "::error::No GitHub Packages token (set packages: read on the job, or pass inputs.token)."
+          exit 1
+        fi
+        dotnet nuget remove source github --configfile "$cfg" >/dev/null 2>&1 || true
+        dotnet nuget add source "$GPR_URL" \
+          --name github \
+          --username "x-access-token" \
+          --password "$gpr_token" \
+          --store-password-in-clear-text \
+          --configfile "$cfg"
