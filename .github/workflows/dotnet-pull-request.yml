@@ -17,6 +17,7 @@ on:
         default: true
 permissions:
   contents: read
+  packages: read
 jobs:
   ci:
     runs-on: ubuntu-latest

@@ -12,7 +12,7 @@ runs:
       shell: bash
       env:
         GPR_URL: https://nuget.pkg.github.com/Novolis-Platform/index.json
-        GPR_TOKEN: ${{ inputs.token }}
+        GPR_TOKEN: ${{ inputs.token != '' && inputs.token || github.token }}
       run: |
         set -euo pipefail
         cfg=""

@@ -20,6 +20,18 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Checkout governance build targets (sibling layout for MSBuild imports)
+      shell: bash
+      run: |
+        set -euo pipefail
+        gov="../novolis-governance"
+        if [ ! -f "$gov/build/Novolis.Version.targets" ]; then
+          git clone --depth 1 --branch main \
+            "https://github.com/${GITHUB_REPOSITORY_OWNER}/novolis-governance.git" "$gov"
+        fi
+      env:
+        GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
     - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
@@ -53,12 +65,12 @@ runs:
           dotnet restore "$slnx" "${cfg_args[@]}"
           dotnet build "$slnx" --no-restore -c Release "${cfg_args[@]}"
           if [ "$RUN_TESTS" = "true" ]; then
-            dotnet test "$slnx" --no-build -c Release --verbosity normal "${cfg_args[@]}"
+            dotnet test "$slnx" --no-build -c Release "${cfg_args[@]}" -- --maximum-parallel-tests 1
           fi
         else
           dotnet restore "${cfg_args[@]}"
           dotnet build --no-restore -c Release "${cfg_args[@]}"
           if [ "$RUN_TESTS" = "true" ]; then
-            dotnet test --no-build -c Release --verbosity normal "${cfg_args[@]}"
+            dotnet test --no-build -c Release "${cfg_args[@]}" -- --maximum-parallel-tests 1
           fi
         fi
