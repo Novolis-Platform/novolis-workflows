@@ -20,6 +20,8 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: Novolis-Platform/novolis-workflows/actions/checkout-sibling-repos@main
+
     - name: Checkout governance build targets (sibling layout for MSBuild imports)
       shell: bash
       run: |
@@ -64,13 +66,23 @@ runs:
         if [ -n "$slnx" ]; then
           dotnet restore "$slnx" "${cfg_args[@]}"
           dotnet build "$slnx" --no-restore -c Release "${cfg_args[@]}"
-          if [ "$RUN_TESTS" = "true" ]; then
-            dotnet test "$slnx" --no-build -c Release "${cfg_args[@]}" -- --maximum-parallel-tests 1
-          fi
         else
           dotnet restore "${cfg_args[@]}"
           dotnet build --no-restore -c Release "${cfg_args[@]}"
-          if [ "$RUN_TESTS" = "true" ]; then
-            dotnet test --no-build -c Release "${cfg_args[@]}" -- --maximum-parallel-tests 1
+        fi
+
+        if [ "$RUN_TESTS" = "true" ]; then
+          shopt -s nullglob
+          ran=false
+          for proj in tests/*/*.csproj; do
+            [ -f "$proj" ] || continue
+            ran=true
+            echo "Testing $proj"
+            dotnet test "$proj" --no-build -c Release "${cfg_args[@]}" -- --maximum-parallel-tests 1
+          done
+          if [ "$ran" = false ] && [ -n "${slnx:-}" ]; then
+            dotnet test "$slnx" --no-build -c Release "${cfg_args[@]}"
+          elif [ "$ran" = false ]; then
+            dotnet test --no-build -c Release "${cfg_args[@]}"
           fi
         fi

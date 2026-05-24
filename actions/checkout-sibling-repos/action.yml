@@ -1,0 +1,29 @@
+name: checkout-sibling-repos
+description: Clone Novolis repos listed in .novolis/sibling-repos next to the workspace (for ProjectReference layout)
+runs:
+  using: composite
+  steps:
+    - name: Clone sibling repositories
+      shell: bash
+      run: |
+        set -euo pipefail
+        list=".novolis/sibling-repos"
+        if [ ! -f "$list" ]; then
+          echo "No $list; skipping sibling checkout."
+          exit 0
+        fi
+        while IFS= read -r repo || [ -n "${repo:-}" ]; do
+          repo="${repo%%#*}"
+          repo="$(echo "$repo" | xargs)"
+          [ -z "$repo" ] && continue
+          dest="../$repo"
+          if [ -f "$dest/.git/HEAD" ] || [ -d "$dest/src" ]; then
+            echo "Sibling present: $repo"
+            continue
+          fi
+          echo "Cloning $repo -> $dest"
+          git clone --depth 1 --branch main \
+            "https://github.com/${GITHUB_REPOSITORY_OWNER}/${repo}.git" "$dest"
+        done < "$list"
+      env:
+        GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
