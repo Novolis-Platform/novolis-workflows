@@ -33,6 +33,8 @@ jobs:
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
+          # PR workflow runs tests; merge publishes all packable projects to GPR.
+          run_tests: false
 
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
         if: inputs.skip_publish == false
