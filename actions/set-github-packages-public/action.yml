@@ -50,20 +50,28 @@ runs:
           package_id=$(echo "$base" | sed -E 's/\.[0-9]+(\.[0-9]+){1,3}$//')
           api_name=$(echo "$package_id" | tr '[:upper:]' '[:lower:]')
 
-          echo "Setting ${package_id} (${api_name}) to public..."
-          http_code=$(curl -sS -o /tmp/gpr-visibility.json -w "%{http_code}" \
-            -X PATCH \
-            -H "Authorization: Bearer ${{ github.token }}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "Content-Type: application/json" \
-            "https://api.github.com/orgs/${OWNER}/packages/${PKG_TYPE}/${api_name}/visibility" \
-            -d '{"visibility":"public"}')
+          set_public() {
+            local name="$1"
+            curl -sS -o /tmp/gpr-visibility.json -w "%{http_code}" \
+              -X PATCH \
+              -H "Authorization: Bearer ${{ github.token }}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" \
+              "https://api.github.com/orgs/${OWNER}/packages/${PKG_TYPE}/${name}/visibility" \
+              -d '{"visibility":"public"}'
+          }
+
+          echo "Setting ${package_id} to public (trying ${api_name}, then ${package_id})..."
+          http_code=$(set_public "$api_name")
+          if [ "$http_code" != "204" ] && [ "$http_code" != "200" ]; then
+            http_code=$(set_public "$package_id")
+          fi
 
           if [ "$http_code" = "204" ] || [ "$http_code" = "200" ]; then
             echo "  visibility=public (${http_code})"
           else
-            echo "::warning::Could not set ${package_id} to public (HTTP ${http_code}): $(cat /tmp/gpr-visibility.json 2>/dev/null || true)"
-            echo "::warning::Set org Package creation to Public and change existing packages in the org Packages UI if needed."
+            echo "::warning::NuGet visibility API returned HTTP ${http_code} for ${package_id} (org NuGet may require UI). Response: $(cat /tmp/gpr-visibility.json 2>/dev/null || true)"
+            echo "::warning::Enable org Settings → Packages → Package creation: Public only, then republish. See novolis-governance/docs/github-packages-org-settings.md"
           fi
 
           if [ -n "$repo_id" ]; then
