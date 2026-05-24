@@ -1,12 +1,18 @@
 name: authenticate-github-packages
-description: Configure GitHub Packages credentials when nuget.config is present
+description: Add GitHub Packages feed; optional token for cross-repo restore (public packages work without auth)
+inputs:
+  token:
+    description: PAT or token with read:packages for cross-repo Novolis.* restore (optional)
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
-    - name: Authenticate to GitHub Packages
+    - name: Configure GitHub Packages feed
       shell: bash
       env:
         GPR_URL: https://nuget.pkg.github.com/Novolis-Platform/index.json
+        GPR_TOKEN: ${{ inputs.token }}
       run: |
         set -euo pipefail
         cfg=""
@@ -14,13 +20,20 @@ runs:
           if [ -f "$f" ]; then cfg="$f"; break; fi
         done
         if [ -z "$cfg" ]; then
-          echo "No nuget.config; skipping GitHub Packages auth."
+          echo "No nuget.config; skipping."
           exit 0
         fi
         dotnet nuget remove source github --configfile "$cfg" >/dev/null 2>&1 || true
-        dotnet nuget add source "$GPR_URL" \
-          --name github \
-          --username "${{ github.actor }}" \
-          --password "${{ github.token }}" \
-          --store-password-in-clear-text \
-          --configfile "$cfg"
+        if [ -n "${GPR_TOKEN:-}" ]; then
+          dotnet nuget add source "$GPR_URL" \
+            --name github \
+            --username "x-access-token" \
+            --password "$GPR_TOKEN" \
+            --store-password-in-clear-text \
+            --configfile "$cfg"
+        else
+          echo "No GPR read token; using anonymous access (public Novolis packages)."
+          dotnet nuget add source "$GPR_URL" \
+            --name github \
+            --configfile "$cfg"
+        fi

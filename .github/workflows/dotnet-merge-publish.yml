@@ -26,6 +26,8 @@ jobs:
           dotnet-version: ${{ inputs.dotnet-version }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+        with:
+          token: ${{ secrets.NOVOLIS_GPR_TOKEN }}
       - uses: Novolis-Platform/novolis-workflows/actions/restore@main
       - uses: Novolis-Platform/novolis-workflows/actions/build@main
       - uses: Novolis-Platform/novolis-workflows/actions/test@main
