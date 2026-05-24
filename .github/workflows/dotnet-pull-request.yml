@@ -15,6 +15,10 @@ on:
         required: false
         type: boolean
         default: true
+      skip_dogfood_prepare:
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
   packages: read
@@ -28,3 +32,4 @@ jobs:
           dotnet-version: ${{ inputs.dotnet-version }}
           solution: ${{ inputs.solution }}
           run_tests: ${{ inputs.run_tests }}
+          skip_dogfood_prepare: ${{ inputs.skip_dogfood_prepare }}

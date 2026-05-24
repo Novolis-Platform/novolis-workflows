@@ -17,6 +17,10 @@ inputs:
     description: Optional read:packages token for private cross-repo restore
     required: false
     default: ''
+  skip_dogfood_prepare:
+    description: Set MSBuild SkipDogfoodPrepare (novolis-dogfooding)
+    required: false
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -47,8 +51,13 @@ runs:
       env:
         SOLUTION: ${{ inputs.solution }}
         RUN_TESTS: ${{ inputs.run_tests }}
+        SKIP_DOGFOOD: ${{ inputs.skip_dogfood_prepare }}
       run: |
         set -euo pipefail
+        msbuild_props=()
+        if [ "$SKIP_DOGFOOD" = "true" ]; then
+          msbuild_props=(-p:SkipDogfoodPrepare=true)
+        fi
         cfg_args=()
         if [ -f nuget.config ]; then
           cfg_args=(--configfile nuget.config)
@@ -64,11 +73,11 @@ runs:
         fi
 
         if [ -n "$slnx" ]; then
-          dotnet restore "$slnx" "${cfg_args[@]}"
-          dotnet build "$slnx" --no-restore -c Release "${cfg_args[@]}"
+          dotnet restore "$slnx" "${cfg_args[@]}" "${msbuild_props[@]}"
+          dotnet build "$slnx" --no-restore -c Release "${cfg_args[@]}" "${msbuild_props[@]}"
         else
-          dotnet restore "${cfg_args[@]}"
-          dotnet build --no-restore -c Release "${cfg_args[@]}"
+          dotnet restore "${cfg_args[@]}" "${msbuild_props[@]}"
+          dotnet build --no-restore -c Release "${cfg_args[@]}" "${msbuild_props[@]}"
         fi
 
         if [ "$RUN_TESTS" = "true" ]; then
