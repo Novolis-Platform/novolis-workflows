@@ -42,6 +42,7 @@ jobs:
 
       - name: Commit build version bump
         if: success() && inputs.skip_publish == false && steps.changes.outputs.should_publish == 'true'
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -51,4 +52,4 @@ jobs:
             exit 0
           fi
           git commit -m "chore: bump build to ${{ steps.bump.outputs.next_version }} [skip ci]"
-          git push
+          git push || echo "::warning::Could not push version bump (branch protection?). Published packages are on GitHub Packages."
