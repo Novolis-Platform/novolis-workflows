@@ -33,3 +33,4 @@ jobs:
           solution: ${{ inputs.solution }}
           run_tests: ${{ inputs.run_tests }}
           skip_dogfood_prepare: ${{ inputs.skip_dogfood_prepare }}
+          packages_token: ${{ github.token }}

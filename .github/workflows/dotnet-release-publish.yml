@@ -37,11 +37,12 @@ jobs:
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
+          packages_token: ${{ github.token }}
           run_tests: false
 
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
         with:
-          package-version: ${{ steps.tag.outputs.version }}
+          package-version: ${{ steps.ver.outputs.package-version }}
           assembly-version: ${{ steps.ver.outputs.assembly-version }}
           file-version: ${{ steps.ver.outputs.file-version }}
           informational-version: ${{ steps.ver.outputs.informational-version }}

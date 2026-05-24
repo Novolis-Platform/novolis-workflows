@@ -32,6 +32,7 @@ jobs:
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
+          packages_token: ${{ github.token }}
           # PR workflow runs tests; merge publishes all packable projects to GPR.
           run_tests: false
 
