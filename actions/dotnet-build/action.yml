@@ -80,6 +80,12 @@ runs:
           dotnet build --no-restore -c Release "${cfg_args[@]}" "${msbuild_props[@]}"
         fi
 
+        if [ -f build/.novolis-documentation-complete ]; then
+          echo "Running documentation audit (strict)..."
+          pwsh -NoProfile -File ../novolis-governance/scripts/doc-audit.ps1 \
+            -RepoRoot "${{ github.workspace }}" -RequireDocumentationProps
+        fi
+
         if [ "$RUN_TESTS" = "true" ]; then
           shopt -s nullglob
           ran=false
