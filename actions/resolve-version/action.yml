@@ -14,4 +14,4 @@ runs:
     - id: out
       shell: bash
       run: |
-        echo "version=${{ steps.read.outputs.package-version }}" >> "$GITHUB_OUTPUT"
+        echo "version=${{ steps.read.outputs['package-version'] }}" >> "$GITHUB_OUTPUT"

@@ -42,10 +42,10 @@ jobs:
 
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
         with:
-          package-version: ${{ steps.ver.outputs.package-version }}
-          assembly-version: ${{ steps.ver.outputs.assembly-version }}
-          file-version: ${{ steps.ver.outputs.file-version }}
-          informational-version: ${{ steps.ver.outputs.informational-version }}
+          package-version: ${{ steps.ver.outputs['package-version'] }}
+          assembly-version: ${{ steps.ver.outputs['assembly-version'] }}
+          file-version: ${{ steps.ver.outputs['file-version'] }}
+          informational-version: ${{ steps.ver.outputs['package-version'] }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/publish-nuget-org@main
         with:

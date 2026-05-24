@@ -39,11 +39,10 @@ jobs:
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
         if: inputs.skip_publish == false
         with:
-          # GPR: 3-part platform line so consumers on floating 2026.1.* (e.g. dogfooding) can restore.
-          package-version: ${{ steps.ver.outputs.platform-version }}
-          assembly-version: ${{ steps.ver.outputs.assembly-version }}
-          file-version: ${{ steps.ver.outputs.file-version }}
-          informational-version: ${{ steps.ver.outputs.package-version }}
+          package-version: ${{ steps.ver.outputs['package-version'] }}
+          assembly-version: ${{ steps.ver.outputs['assembly-version'] }}
+          file-version: ${{ steps.ver.outputs['file-version'] }}
+          informational-version: ${{ steps.ver.outputs['package-version'] }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
         if: inputs.skip_publish == false

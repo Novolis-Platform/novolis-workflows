@@ -23,6 +23,18 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Checkout governance build targets (sibling layout for MSBuild imports)
+      shell: bash
+      run: |
+        set -euo pipefail
+        gov="../novolis-governance"
+        if [ ! -f "$gov/build/Novolis.Version.targets" ]; then
+          git clone --depth 1 --branch main \
+            "https://github.com/${GITHUB_REPOSITORY_OWNER}/novolis-governance.git" "$gov"
+        fi
+      env:
+        GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
     - name: Pack
       shell: bash
       env:

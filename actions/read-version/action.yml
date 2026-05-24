@@ -24,19 +24,19 @@ outputs:
     value: ${{ steps.out.outputs.build }}
   platform-version:
     description: YEAR.MAJOR.MINOR platform line
-    value: ${{ steps.out.outputs.platform-version }}
+    value: ${{ steps.out.outputs['platform-version'] }}
   package-version:
     description: YEAR.MAJOR.MINOR.BUILD full package version
-    value: ${{ steps.out.outputs.package-version }}
+    value: ${{ steps.out.outputs['package-version'] }}
   assembly-version:
     description: AssemblyVersion (YEAR.MAJOR.0.0)
-    value: ${{ steps.out.outputs.assembly-version }}
+    value: ${{ steps.out.outputs['assembly-version'] }}
   file-version:
     description: FileVersion (YEAR.MAJOR.MINOR.BUILD)
-    value: ${{ steps.out.outputs.file-version }}
+    value: ${{ steps.out.outputs['file-version'] }}
   informational-version:
     description: InformationalVersion (defaults to full package version)
-    value: ${{ steps.out.outputs.informational-version }}
+    value: ${{ steps.out.outputs['informational-version'] }}
 runs:
   using: composite
   steps:
