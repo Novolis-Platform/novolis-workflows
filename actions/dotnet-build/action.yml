@@ -78,11 +78,11 @@ runs:
             [ -f "$proj" ] || continue
             ran=true
             echo "Testing $proj"
-            dotnet test "$proj" --no-build -c Release "${cfg_args[@]}"
+            dotnet test "$proj" --no-build -c Release
           done
           if [ "$ran" = false ] && [ -n "${slnx:-}" ]; then
-            dotnet test "$slnx" --no-build -c Release "${cfg_args[@]}"
+            dotnet test "$slnx" --no-build -c Release
           elif [ "$ran" = false ]; then
-            dotnet test --no-build -c Release "${cfg_args[@]}"
+            dotnet test --no-build -c Release
           fi
         fi
