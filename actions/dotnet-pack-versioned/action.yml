@@ -73,3 +73,22 @@ runs:
         else
           dotnet pack -c Release -o artifacts/packages "${props[@]}"
         fi
+
+    - name: Verify package README in each nupkg
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $verify = if (Test-Path '../novolis-governance/scripts/verify-nupkg-package-readme.ps1') {
+          (Resolve-Path '../novolis-governance/scripts/verify-nupkg-package-readme.ps1').Path
+        } elseif (Test-Path 'novolis-governance/scripts/verify-nupkg-package-readme.ps1') {
+          (Resolve-Path 'novolis-governance/scripts/verify-nupkg-package-readme.ps1').Path
+        } else {
+          Write-Warning 'novolis-governance not found; skip nupkg readme verification'
+          exit 0
+        }
+        Get-ChildItem artifacts/packages/*.nupkg | ForEach-Object {
+          if ($_.Name -match '\.symbols\.') { return }
+          $id = $_.BaseName -replace '\.\d{4}\.\d+\.\d+\.\d+$',''
+          if ($id -notmatch '^Novolis\.') { return }
+          & $verify -NupkgPath $_.FullName -ExpectedPackageId $id
+        }
