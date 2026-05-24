@@ -81,18 +81,22 @@ runs:
         fi
 
         if [ "$RUN_TESTS" = "true" ]; then
-          shopt -s nullglob
-          ran=false
-          for proj in tests/*/*.csproj tests/**/*.csproj; do
-            [ -f "$proj" ] || continue
-            if ! grep -q '<IsTestProject>true</IsTestProject>' "$proj" 2>/dev/null; then
-              continue
+          if [ -n "$slnx" ]; then
+            dotnet test "$slnx" --no-build -c Release "${cfg_args[@]}"
+          else
+            shopt -s nullglob
+            ran=false
+            for proj in tests/*/*.csproj tests/**/*.csproj; do
+              [ -f "$proj" ] || continue
+              if ! grep -q '<IsTestProject>true</IsTestProject>' "$proj" 2>/dev/null; then
+                continue
+              fi
+              ran=true
+              echo "Testing $proj"
+              dotnet test "$proj" --no-build -c Release
+            done
+            if [ "$ran" = false ]; then
+              echo "No test projects under tests/; skipping dotnet test."
             fi
-            ran=true
-            echo "Testing $proj"
-            dotnet test "$proj" --no-build -c Release
-          done
-          if [ "$ran" = false ]; then
-            echo "No test projects under tests/; skipping dotnet test."
           fi
         fi
