@@ -89,6 +89,10 @@ runs:
             if [ "$is_test" != "true" ]; then
               continue
             fi
+            # tests/ folder marks support libraries as IsTestProject; only run real test hosts.
+            if ! grep -qE 'TUnit|Microsoft\.NET\.Test\.Sdk|xunit|NUnit' "$proj" 2>/dev/null; then
+              continue
+            fi
             ran=true
             echo "Testing $proj"
             dotnet test "$proj" --no-build -c Release
