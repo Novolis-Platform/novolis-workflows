@@ -1,0 +1,32 @@
+name: bump-build-version
+description: Increment NovolisVersionBuild in .novolis/version.props after a successful publish
+outputs:
+  version:
+    description: Full 4-part version before bump
+    value: ${{ steps.bump.outputs.version }}
+  next_version:
+    description: Full 4-part version after bump
+    value: ${{ steps.bump.outputs.next_version }}
+runs:
+  using: composite
+  steps:
+    - id: bump
+      shell: bash
+      run: |
+        set -euo pipefail
+        FILE=".novolis/version.props"
+        if [ ! -f "$FILE" ]; then
+          echo "::error::Missing $FILE"
+          exit 1
+        fi
+        major=$(grep -oP '(?<=<NovolisVersionMajor>)[0-9]+' "$FILE" | head -1)
+        minor=$(grep -oP '(?<=<NovolisVersionMinor>)[0-9]+' "$FILE" | head -1)
+        patch=$(grep -oP '(?<=<NovolisVersionPatch>)[0-9]+' "$FILE" | head -1)
+        build=$(grep -oP '(?<=<NovolisVersionBuild>)[0-9]+' "$FILE" | head -1)
+        version="${major}.${minor}.${patch}.${build}"
+        next_build=$((build + 1))
+        next_version="${major}.${minor}.${patch}.${next_build}"
+        sed -i "s/<NovolisVersionBuild>${build}<\\/NovolisVersionBuild>/<NovolisVersionBuild>${next_build}<\\/NovolisVersionBuild>/" "$FILE"
+        echo "version=${version}" >> "$GITHUB_OUTPUT"
+        echo "next_version=${next_version}" >> "$GITHUB_OUTPUT"
+        echo "Published ${version}; next build will be ${next_version}"

@@ -1,0 +1,62 @@
+name: dotnet-merge-publish
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        required: false
+        type: string
+        default: '10.0.x'
+      environment:
+        required: false
+        type: string
+        default: nuget.org
+      skip_publish:
+        required: false
+        type: boolean
+        default: false
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - uses: Novolis-Platform/novolis-workflows/actions/restore@main
+      - uses: Novolis-Platform/novolis-workflows/actions/build@main
+      - uses: Novolis-Platform/novolis-workflows/actions/test@main
+
+      - uses: Novolis-Platform/novolis-workflows/actions/pack@main
+
+      - uses: Novolis-Platform/novolis-workflows/actions/detect-changes@main
+        id: changes
+
+      - uses: Novolis-Platform/novolis-workflows/actions/publish-nuget@main
+        if: inputs.skip_publish == false && steps.changes.outputs.should_publish == 'true'
+        with:
+          nuget-username: ${{ vars.NUGET_USERNAME }}
+
+      - uses: Novolis-Platform/novolis-workflows/actions/bump-build-version@main
+        id: bump
+        if: success()
+
+      - name: Commit build version bump
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .novolis/version.props
+          if git diff --staged --quiet; then
+            echo "No version file changes to commit."
+            exit 0
+          fi
+          git commit -m "chore: bump build to ${{ steps.bump.outputs.next_version }} [skip ci]"
+          git push
