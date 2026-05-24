@@ -40,5 +40,8 @@ runs:
           dotnet build "$proj" -c Release --no-restore
         done
         for proj in "${tests[@]}"; do
-          dotnet test "$proj" -c Release --no-build
+          dotnet build "$proj" -c Release --no-restore
+        done
+        for proj in "${tests[@]}"; do
+          dotnet test "$proj" -c Release --no-build -- --maximum-parallel-tests 1
         done
