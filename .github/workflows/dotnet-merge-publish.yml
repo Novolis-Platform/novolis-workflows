@@ -25,6 +25,7 @@ jobs:
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
 
+      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
       - uses: Novolis-Platform/novolis-workflows/actions/restore@main
       - uses: Novolis-Platform/novolis-workflows/actions/build@main
       - uses: Novolis-Platform/novolis-workflows/actions/test@main

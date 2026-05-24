@@ -22,4 +22,12 @@ runs:
         if [ -n "${VERSION:-}" ]; then
           extra="-p:Version=${VERSION} -p:PackageVersion=${VERSION}"
         fi
-        dotnet pack --no-build -c Release -o artifacts/packages $extra
+        slnx=""
+        for f in *.slnx; do
+          if [ -f "$f" ]; then slnx="$f"; break; fi
+        done
+        if [ -n "$slnx" ]; then
+          dotnet pack "$slnx" -c Release -o artifacts/packages $extra
+        else
+          dotnet pack -c Release -o artifacts/packages $extra
+        fi
