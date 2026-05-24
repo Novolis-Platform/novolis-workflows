@@ -28,7 +28,6 @@ jobs:
         with:
           version-file: ${{ inputs.version-file }}
           build-number: ${{ github.run_number }}
-          git-sha: ${{ github.sha }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
         with:
@@ -39,10 +38,11 @@ jobs:
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
         if: inputs.skip_publish == false
         with:
-          package-version: ${{ steps.ver.outputs.package-version }}
+          # GPR: 3-part platform line so consumers on floating 2026.1.* (e.g. dogfooding) can restore.
+          package-version: ${{ steps.ver.outputs.platform-version }}
           assembly-version: ${{ steps.ver.outputs.assembly-version }}
           file-version: ${{ steps.ver.outputs.file-version }}
-          informational-version: ${{ steps.ver.outputs.informational-version }}
+          informational-version: ${{ steps.ver.outputs.package-version }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
         if: inputs.skip_publish == false
