@@ -1,0 +1,64 @@
+name: dotnet-build
+description: Setup SDK, optional GitHub Packages auth, restore, build, and test
+inputs:
+  dotnet-version:
+    description: .NET SDK version
+    required: false
+    default: '10.0.x'
+  solution:
+    description: Solution path (defaults to first *.slnx in repo root)
+    required: false
+    default: ''
+  run_tests:
+    description: Run dotnet test after build
+    required: false
+    default: 'true'
+  packages_token:
+    description: Optional read:packages token for private cross-repo restore
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+
+    - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      with:
+        token: ${{ inputs.packages_token }}
+
+    - name: Restore, build, and test
+      shell: bash
+      env:
+        SOLUTION: ${{ inputs.solution }}
+        RUN_TESTS: ${{ inputs.run_tests }}
+      run: |
+        set -euo pipefail
+        cfg_args=()
+        if [ -f nuget.config ]; then
+          cfg_args=(--configfile nuget.config)
+        elif [ -f NuGet.config ]; then
+          cfg_args=(--configfile NuGet.config)
+        fi
+
+        slnx="${SOLUTION:-}"
+        if [ -z "$slnx" ]; then
+          for f in *.slnx; do
+            if [ -f "$f" ]; then slnx="$f"; break; fi
+          done
+        fi
+
+        if [ -n "$slnx" ]; then
+          dotnet restore "$slnx" "${cfg_args[@]}"
+          dotnet build "$slnx" --no-restore -c Release "${cfg_args[@]}"
+          if [ "$RUN_TESTS" = "true" ]; then
+            dotnet test "$slnx" --no-build -c Release --verbosity normal "${cfg_args[@]}"
+          fi
+        else
+          dotnet restore "${cfg_args[@]}"
+          dotnet build --no-restore -c Release "${cfg_args[@]}"
+          if [ "$RUN_TESTS" = "true" ]; then
+            dotnet test --no-build -c Release --verbosity normal "${cfg_args[@]}"
+          fi
+        fi

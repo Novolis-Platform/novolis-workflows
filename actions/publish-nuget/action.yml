@@ -1,9 +1,0 @@
-name: publish-nuget
-description: Deprecated — use publish-github-packages. This action fails fast so nuget.org is never used accidentally.
-runs:
-  using: composite
-  steps:
-    - shell: bash
-      run: |
-        echo "::error::publish-nuget is disabled. Use publish-github-packages (GitHub Packages) instead."
-        exit 1

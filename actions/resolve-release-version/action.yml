@@ -1,0 +1,21 @@
+name: resolve-release-version
+description: Parse major.minor.patch(.build) from github.event.release.tag_name
+outputs:
+  version:
+    description: Version without v prefix
+    value: ${{ steps.out.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - id: out
+      shell: bash
+      run: |
+        set -euo pipefail
+        TAG="${{ github.event.release.tag_name }}"
+        if [ -z "$TAG" ]; then
+          echo "::error::This action requires release published (missing tag_name)."
+          exit 1
+        fi
+        VERSION="${TAG#v}"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "Release version: $VERSION (from $TAG)"

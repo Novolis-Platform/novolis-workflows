@@ -1,4 +1,4 @@
-name: dotnet-merge-publish
+name: dotnet-raylib-merge-publish
 on:
   workflow_call:
     inputs:
@@ -19,21 +19,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
+      - uses: Novolis-Platform/novolis-workflows/actions/raylib-build-test@main
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
 
-      - uses: Novolis-Platform/novolis-workflows/actions/pack@main
-        if: inputs.skip_publish == false
-
-      - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
-        if: inputs.skip_publish == false
-
-      - uses: Novolis-Platform/novolis-workflows/actions/bump-build-version@main
-        id: bump
+      - uses: Novolis-Platform/novolis-workflows/actions/raylib-pack-publish@main
+        id: publish
         if: inputs.skip_publish == false
 
       - uses: Novolis-Platform/novolis-workflows/actions/commit-version-bump@main
         if: inputs.skip_publish == false
         with:
-          next_version: ${{ steps.bump.outputs.next_version }}
+          next_version: ${{ steps.publish.outputs.next_version }}

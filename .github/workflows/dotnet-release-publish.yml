@@ -1,0 +1,36 @@
+name: dotnet-release-publish
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        required: false
+        type: string
+        default: '10.0.x'
+    secrets:
+      NUGET_API_KEY:
+        required: true
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Novolis-Platform/novolis-workflows/actions/resolve-release-version@main
+        id: ver
+
+      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+          run_tests: false
+
+      - uses: Novolis-Platform/novolis-workflows/actions/pack@main
+        with:
+          version: ${{ steps.ver.outputs.version }}
+
+      - uses: Novolis-Platform/novolis-workflows/actions/publish-nuget-org@main
+        with:
+          api_key: ${{ secrets.NUGET_API_KEY }}
+
+      - uses: Novolis-Platform/novolis-workflows/actions/upload-release-packages@main

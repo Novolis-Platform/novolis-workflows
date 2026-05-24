@@ -1,0 +1,32 @@
+name: raylib-pack-publish
+description: Pack shipping Raylib packages, publish to GitHub Packages, bump build version
+outputs:
+  next_version:
+    description: Version after build bump
+    value: ${{ steps.bump.outputs.next_version }}
+runs:
+  using: composite
+  steps:
+    - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+
+    - name: Build shipping libraries
+      shell: bash
+      run: |
+        set -euo pipefail
+        cfg=(--configfile nuget.config)
+        for proj in src/*/*.csproj; do
+          dotnet restore "$proj" "${cfg[@]}"
+          dotnet build "$proj" -c Release
+        done
+
+    - uses: Novolis-Platform/novolis-workflows/actions/resolve-version@main
+      id: ver
+
+    - name: Pack shipping packages
+      shell: pwsh
+      run: ./scripts/pack-all.ps1 -Version ${{ steps.ver.outputs.version }}
+
+    - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
+
+    - uses: Novolis-Platform/novolis-workflows/actions/bump-build-version@main
+      id: bump

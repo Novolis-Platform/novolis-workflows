@@ -1,0 +1,38 @@
+name: publish-nuget-org
+description: Push .nupkg files to nuget.org (requires NUGET_API_KEY secret)
+inputs:
+  packages_dir:
+    description: Directory containing .nupkg files
+    required: false
+    default: artifacts/packages
+  api_key:
+    description: NuGet.org API key (defaults to env NUGET_API_KEY)
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Push to nuget.org
+      shell: bash
+      env:
+        PKG_DIR: ${{ inputs.packages_dir }}
+        NUGET_API_KEY: ${{ inputs.api_key != '' && inputs.api_key || env.NUGET_API_KEY }}
+      run: |
+        set -euo pipefail
+        if [ -z "${NUGET_API_KEY:-}" ]; then
+          echo "::error::NUGET_API_KEY is not set. Add org/repo secret or use environment nuget.org."
+          exit 1
+        fi
+        shopt -s nullglob
+        pkgs=("$PKG_DIR"/*.nupkg)
+        if [ ${#pkgs[@]} -eq 0 ]; then
+          echo "::error::No packages found in $PKG_DIR"
+          exit 1
+        fi
+        for pkg in "${pkgs[@]}"; do
+          echo "Pushing $(basename "$pkg") to nuget.org"
+          dotnet nuget push "$pkg" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --api-key "$NUGET_API_KEY" \
+            --skip-duplicate
+        done

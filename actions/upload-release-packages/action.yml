@@ -1,0 +1,34 @@
+name: upload-release-packages
+description: Attach .nupkg (and .snupkg) files to the GitHub release that triggered the workflow
+inputs:
+  tag:
+    description: Release tag (defaults to github.event.release.tag_name)
+    required: false
+    default: ''
+  packages_dir:
+    description: Directory containing package files
+    required: false
+    default: artifacts/packages
+runs:
+  using: composite
+  steps:
+    - name: Upload packages to GitHub Release
+      shell: bash
+      env:
+        PKG_DIR: ${{ inputs.packages_dir }}
+        TAG: ${{ inputs.tag != '' && inputs.tag || github.event.release.tag_name }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        if [ -z "${TAG:-}" ]; then
+          echo "::error::Release tag is required (workflow must run on release published)."
+          exit 1
+        fi
+        shopt -s nullglob
+        files=("$PKG_DIR"/*.nupkg "$PKG_DIR"/*.snupkg)
+        if [ ${#files[@]} -eq 0 ]; then
+          echo "::error::No .nupkg or .snupkg files in $PKG_DIR"
+          exit 1
+        fi
+        echo "Uploading ${#files[@]} file(s) to release ${TAG}"
+        gh release upload "$TAG" "${files[@]}" --clobber
