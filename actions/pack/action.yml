@@ -1,9 +1,25 @@
 name: pack
-description: dotnet pack
+description: dotnet pack using .novolis/version.props when present
+inputs:
+  version:
+    description: Optional override; defaults to .novolis/version.props
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
-    - run: |
-        mkdir -p artifacts/packages
-        dotnet pack --no-build -c Release -o artifacts/packages
+    - id: ver
+      if: inputs.version == ''
+      uses: Novolis-Platform/novolis-workflows/actions/resolve-version@main
+    - name: Pack
       shell: bash
+      env:
+        VERSION: ${{ inputs.version != '' && inputs.version || steps.ver.outputs.version }}
+      run: |
+        set -euo pipefail
+        mkdir -p artifacts/packages
+        extra=""
+        if [ -n "${VERSION:-}" ]; then
+          extra="-p:Version=${VERSION} -p:PackageVersion=${VERSION}"
+        fi
+        dotnet pack --no-build -c Release -o artifacts/packages $extra

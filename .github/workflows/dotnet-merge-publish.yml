@@ -6,25 +6,16 @@ on:
         required: false
         type: string
         default: '10.0.x'
-      environment:
-        required: false
-        type: string
-        default: nuget.org
       skip_publish:
         required: false
         type: boolean
         default: false
-      nuget-username:
-        required: false
-        type: string
-        description: nuget.org profile name; defaults to caller vars.NUGET_USERNAME
 permissions:
   contents: write
-  id-token: write
+  packages: write
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,23 +28,20 @@ jobs:
       - uses: Novolis-Platform/novolis-workflows/actions/restore@main
       - uses: Novolis-Platform/novolis-workflows/actions/build@main
       - uses: Novolis-Platform/novolis-workflows/actions/test@main
-
       - uses: Novolis-Platform/novolis-workflows/actions/pack@main
 
       - uses: Novolis-Platform/novolis-workflows/actions/detect-changes@main
         id: changes
 
-      - uses: Novolis-Platform/novolis-workflows/actions/publish-nuget@main
+      - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
         if: inputs.skip_publish == false && steps.changes.outputs.should_publish == 'true'
-        with:
-          nuget-username: ${{ inputs.nuget-username != '' && inputs.nuget-username || vars.NUGET_USERNAME }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/bump-build-version@main
         id: bump
-        if: success()
+        if: success() && inputs.skip_publish == false && steps.changes.outputs.should_publish == 'true'
 
       - name: Commit build version bump
-        if: success()
+        if: success() && inputs.skip_publish == false && steps.changes.outputs.should_publish == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

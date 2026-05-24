@@ -1,23 +1,27 @@
 # novolis-workflows
 
-Central reusable GitHub workflows and composite actions for Novolis repositories.
+Reusable GitHub Actions workflows for Novolis repositories.
 
-## Workflows
+## Publishing
 
-| Workflow | Use in repo |
-|----------|-------------|
-| `dotnet-ci.yml` | Generic CI (build + test) |
-| `dotnet-pull-request.yml` | PR validation |
-| `dotnet-merge-publish.yml` | Main branch: build, test, pack, publish, bump `.novolis/version.props` build |
-| `dotnet-publish-nuget.yml` | Tag / GitHub Release publish |
-| `dotnet-pack.yml` | Pack artifacts only |
+Packages are published to **[GitHub Packages](https://github.com/orgs/Novolis-Platform/packages)** (NuGet feed), **not** nuget.org.
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `dotnet-merge-publish.yml` | `merge.yml` on push to `main` | Build, test, pack, push to GitHub Packages, bump build |
+| `dotnet-pull-request.yml` | PR | Build and test only |
+| `dotnet-publish-nuget.yml` | `release.yml` | Pack and push to GitHub Packages |
+
+Feed URL (org):
+
+```text
+https://nuget.pkg.github.com/Novolis-Platform/index.json
+```
 
 ## Repo setup
 
-1. Add `.novolis/version.props` starting at `0.0.1.1` (see `novolis-governance/build/Novolis.Version.props`).
-2. Import version props in `Directory.Build.props` and `Novolis.Version.targets` in `Directory.Build.targets`.
-3. Add `.github/workflows/merge.yml` and `pull-request.yml` (run `novolis-governance/scripts/configure-package-publishing.ps1`).
+1. `.novolis/version.props` starting at `0.0.1.1`
+2. `Directory.Build.targets` importing `novolis-governance/build/Novolis.Version.targets`
+3. `merge.yml` with `permissions: packages: write`
 
-## Versioning
-
-4-part semver: `major.minor.patch.build`. The **build** segment increments automatically on each successful `merge.yml` run.
+Run `novolis-governance/scripts/configure-package-publishing.ps1` to scaffold a repo.

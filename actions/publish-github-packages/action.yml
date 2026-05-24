@@ -1,0 +1,27 @@
+name: publish-github-packages
+description: Push .nupkg files to the GitHub Packages NuGet feed for the repository owner
+inputs:
+  owner:
+    description: GitHub org or user (defaults to github.repository_owner)
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Push packages
+      shell: bash
+      env:
+        OWNER: ${{ inputs.owner != '' && inputs.owner || github.repository_owner }}
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        pkgs=(artifacts/packages/*.nupkg)
+        if [ ${#pkgs[@]} -eq 0 ]; then
+          echo "::error::No packages found in artifacts/packages/"
+          exit 1
+        fi
+        source="https://nuget.pkg.github.com/${OWNER}/index.json"
+        for pkg in "${pkgs[@]}"; do
+          echo "Pushing $(basename "$pkg") to GitHub Packages (${OWNER})"
+          dotnet nuget push "$pkg" --source "$source" --api-key "${{ github.token }}" --skip-duplicate
+        done

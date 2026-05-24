@@ -1,17 +1,9 @@
 name: publish-nuget
-description: Publish packages to NuGet via trusted publishing (OIDC)
-inputs:
-  nuget-username:
-    description: nuget.org profile name (not email). Set repository variable NUGET_USERNAME.
-    required: true
+description: Deprecated — use publish-github-packages. This action fails fast so nuget.org is never used accidentally.
 runs:
   using: composite
   steps:
-    - name: NuGet login (OIDC)
-      uses: NuGet/login@v1
-      id: login
-      with:
-        user: ${{ inputs.nuget-username }}
-    - name: Push packages
-      run: dotnet nuget push artifacts/packages/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-      shell: bash
+    - shell: bash
+      run: |
+        echo "::error::publish-nuget is disabled. Use publish-github-packages (GitHub Packages) instead."
+        exit 1
