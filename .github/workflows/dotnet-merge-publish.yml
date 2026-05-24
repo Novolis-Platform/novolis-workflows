@@ -27,6 +27,7 @@ jobs:
         id: ver
         with:
           version-file: ${{ inputs.version-file }}
+          prerelease-label: ci
           build-number: ${{ github.run_number }}
           git-sha: ${{ github.sha }}
 
