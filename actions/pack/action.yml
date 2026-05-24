@@ -1,33 +1,28 @@
 name: pack
-description: dotnet pack using .novolis/version.props when present
+description: dotnet pack using build/version.json (delegates to read-version + dotnet-pack-versioned)
 inputs:
   version:
-    description: Optional override; defaults to .novolis/version.props
+    description: Optional override package version
     required: false
     default: ''
+  version-file:
+    description: Path to version.json
+    required: false
+    default: build/version.json
 runs:
   using: composite
   steps:
-    - id: ver
-      if: inputs.version == ''
-      uses: Novolis-Platform/novolis-workflows/actions/resolve-version@main
-    - name: Pack
-      shell: bash
-      env:
-        VERSION: ${{ inputs.version != '' && inputs.version || steps.ver.outputs.version }}
-      run: |
-        set -euo pipefail
-        mkdir -p artifacts/packages
-        extra=""
-        if [ -n "${VERSION:-}" ]; then
-          extra="-p:Version=${VERSION} -p:PackageVersion=${VERSION}"
-        fi
-        slnx=""
-        for f in *.slnx; do
-          if [ -f "$f" ]; then slnx="$f"; break; fi
-        done
-        if [ -n "$slnx" ]; then
-          dotnet pack "$slnx" -c Release -o artifacts/packages $extra
-        else
-          dotnet pack -c Release -o artifacts/packages $extra
-        fi
+    - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
+      id: ver
+      with:
+        version-file: ${{ inputs.version-file }}
+        prerelease-label: ci
+        build-number: ${{ github.run_number }}
+        git-sha: ${{ github.sha }}
+
+    - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
+      with:
+        package-version: ${{ inputs.version != '' && inputs.version || steps.ver.outputs.package-version }}
+        assembly-version: ${{ steps.ver.outputs.assembly-version }}
+        file-version: ${{ steps.ver.outputs.file-version }}
+        informational-version: ${{ steps.ver.outputs.informational-version }}

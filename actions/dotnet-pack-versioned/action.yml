@@ -1,0 +1,63 @@
+name: dotnet-pack-versioned
+description: dotnet pack with explicit version and assembly metadata properties
+inputs:
+  solution:
+    description: Solution path (defaults to first *.slnx in repo root)
+    required: false
+    default: ''
+  package-version:
+    description: PackageVersion and Version
+    required: true
+  assembly-version:
+    description: AssemblyVersion
+    required: false
+    default: ''
+  file-version:
+    description: FileVersion
+    required: false
+    default: ''
+  informational-version:
+    description: InformationalVersion
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Pack
+      shell: bash
+      env:
+        SOLUTION: ${{ inputs.solution }}
+        PACKAGE_VERSION: ${{ inputs.package-version }}
+        ASSEMBLY_VERSION: ${{ inputs.assembly-version }}
+        FILE_VERSION: ${{ inputs.file-version }}
+        INFO_VERSION: ${{ inputs.informational-version }}
+      run: |
+        set -euo pipefail
+        mkdir -p artifacts/packages
+
+        props=(
+          "-p:Version=${PACKAGE_VERSION}"
+          "-p:PackageVersion=${PACKAGE_VERSION}"
+        )
+        if [ -n "${ASSEMBLY_VERSION:-}" ]; then
+          props+=("-p:AssemblyVersion=${ASSEMBLY_VERSION}")
+        fi
+        if [ -n "${FILE_VERSION:-}" ]; then
+          props+=("-p:FileVersion=${FILE_VERSION}")
+        fi
+        if [ -n "${INFO_VERSION:-}" ]; then
+          props+=("-p:InformationalVersion=${INFO_VERSION}")
+        fi
+
+        slnx="${SOLUTION:-}"
+        if [ -z "$slnx" ]; then
+          for f in *.slnx; do
+            if [ -f "$f" ]; then slnx="$f"; break; fi
+          done
+        fi
+
+        if [ -n "$slnx" ]; then
+          dotnet pack "$slnx" -c Release -o artifacts/packages "${props[@]}"
+        else
+          dotnet pack -c Release -o artifacts/packages "${props[@]}"
+        fi

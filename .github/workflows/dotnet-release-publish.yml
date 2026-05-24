@@ -6,11 +6,16 @@ on:
         required: false
         type: string
         default: '10.0.x'
+      version-file:
+        required: false
+        type: string
+        default: build/version.json
     secrets:
       NUGET_API_KEY:
         required: true
 permissions:
-  contents: write
+  contents: read
+  packages: write
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -18,16 +23,28 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: Novolis-Platform/novolis-workflows/actions/resolve-release-version@main
+        id: tag
+        with:
+          version-file: ${{ inputs.version-file }}
+
+      - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
         id: ver
+        with:
+          version-file: ${{ inputs.version-file }}
+          build-number: ${{ github.run_number }}
+          git-sha: ${{ github.sha }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           run_tests: false
 
-      - uses: Novolis-Platform/novolis-workflows/actions/pack@main
+      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
         with:
-          version: ${{ steps.ver.outputs.version }}
+          package-version: ${{ steps.tag.outputs.version }}
+          assembly-version: ${{ steps.ver.outputs.assembly-version }}
+          file-version: ${{ steps.ver.outputs.file-version }}
+          informational-version: ${{ steps.ver.outputs.informational-version }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/publish-nuget-org@main
         with:

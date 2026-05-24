@@ -6,12 +6,16 @@ on:
         required: false
         type: string
         default: '10.0.x'
+      version-file:
+        required: false
+        type: string
+        default: build/version.json
       skip_publish:
         required: false
         type: boolean
         default: false
 permissions:
-  contents: write
+  contents: read
   packages: write
 jobs:
   ci:
@@ -19,21 +23,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
+        id: ver
+        with:
+          version-file: ${{ inputs.version-file }}
+          prerelease-label: ci
+          build-number: ${{ github.run_number }}
+          git-sha: ${{ github.sha }}
+
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
 
-      - uses: Novolis-Platform/novolis-workflows/actions/pack@main
+      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
         if: inputs.skip_publish == false
+        with:
+          package-version: ${{ steps.ver.outputs.package-version }}
+          assembly-version: ${{ steps.ver.outputs.assembly-version }}
+          file-version: ${{ steps.ver.outputs.file-version }}
+          informational-version: ${{ steps.ver.outputs.informational-version }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
         if: inputs.skip_publish == false
-
-      - uses: Novolis-Platform/novolis-workflows/actions/bump-build-version@main
-        id: bump
-        if: inputs.skip_publish == false
-
-      - uses: Novolis-Platform/novolis-workflows/actions/commit-version-bump@main
-        if: inputs.skip_publish == false
-        with:
-          next_version: ${{ steps.bump.outputs.next_version }}

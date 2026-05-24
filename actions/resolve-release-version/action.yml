@@ -1,14 +1,21 @@
 name: resolve-release-version
-description: Parse major.minor.patch(.build) from github.event.release.tag_name
+description: Parse and validate release tag against build/version.json stable version
+inputs:
+  version-file:
+    description: Path to version.json
+    required: false
+    default: build/version.json
 outputs:
   version:
-    description: Version without v prefix
+    description: Stable version without v prefix
     value: ${{ steps.out.outputs.version }}
 runs:
   using: composite
   steps:
     - id: out
       shell: bash
+      env:
+        VERSION_FILE: ${{ inputs.version-file }}
       run: |
         set -euo pipefail
         TAG="${{ github.event.release.tag_name }}"
@@ -17,5 +24,21 @@ runs:
           exit 1
         fi
         VERSION="${TAG#v}"
+
+        if [ ! -f "$VERSION_FILE" ]; then
+          echo "::error::Missing $VERSION_FILE"
+          exit 1
+        fi
+
+        sdk_year=$(jq -r '.sdkYear' "$VERSION_FILE")
+        api_break=$(jq -r '.apiBreak' "$VERSION_FILE")
+        feature=$(jq -r '.feature' "$VERSION_FILE")
+        expected="${sdk_year}.${api_break}.${feature}"
+
+        if [ "$VERSION" != "$expected" ]; then
+          echo "::error::Release tag v${VERSION} does not match $VERSION_FILE stable version ${expected}."
+          exit 1
+        fi
+
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-        echo "Release version: $VERSION (from $TAG)"
+        echo "Release version: $VERSION (validated against $VERSION_FILE)"
