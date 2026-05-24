@@ -9,6 +9,34 @@ inputs:
     description: CI build segment (github.run_number)
     required: false
     default: ''
+outputs:
+  year:
+    description: YEAR segment from version.json
+    value: ${{ steps.out.outputs.year }}
+  major:
+    description: MAJOR segment from version.json
+    value: ${{ steps.out.outputs.major }}
+  minor:
+    description: MINOR segment from version.json
+    value: ${{ steps.out.outputs.minor }}
+  build:
+    description: BUILD segment (run number)
+    value: ${{ steps.out.outputs.build }}
+  platform-version:
+    description: YEAR.MAJOR.MINOR platform line
+    value: ${{ steps.out.outputs.platform-version }}
+  package-version:
+    description: YEAR.MAJOR.MINOR.BUILD full package version
+    value: ${{ steps.out.outputs.package-version }}
+  assembly-version:
+    description: AssemblyVersion (YEAR.MAJOR.0.0)
+    value: ${{ steps.out.outputs.assembly-version }}
+  file-version:
+    description: FileVersion (YEAR.MAJOR.MINOR.BUILD)
+    value: ${{ steps.out.outputs.file-version }}
+  informational-version:
+    description: InformationalVersion (defaults to full package version)
+    value: ${{ steps.out.outputs.informational-version }}
 runs:
   using: composite
   steps:
