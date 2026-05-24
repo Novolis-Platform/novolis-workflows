@@ -1,0 +1,61 @@
+# After org Settings → Packages → Package creation allows Public only:
+# deletes this repo's org NuGet packages and republishes from main (new packages should be public).
+name: Republish NuGet as public
+
+on:
+  workflow_dispatch:
+    inputs:
+      dotnet-version:
+        description: .NET SDK version
+        type: string
+        default: '10.0.x'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  republish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+
+      - uses: Novolis-Platform/novolis-workflows/actions/restore@main
+      - uses: Novolis-Platform/novolis-workflows/actions/build@main
+      - uses: Novolis-Platform/novolis-workflows/actions/test@main
+      - uses: Novolis-Platform/novolis-workflows/actions/pack@main
+
+      - name: Delete existing org NuGet packages (from packed .nupkg names)
+        env:
+          ORG: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          pkgs=(artifacts/packages/*.nupkg)
+          if [ ${#pkgs[@]} -eq 0 ]; then
+            echo "::error::No packages to delete; pack step produced no .nupkg files."
+            exit 1
+          fi
+          for pkg in "${pkgs[@]}"; do
+            base=$(basename "$pkg" .nupkg)
+            package_id=$(echo "$base" | sed -E 's/\.[0-9]+(\.[0-9]+){1,3}$//')
+            api_name=$(echo "$package_id" | tr '[:upper:]' '[:lower:]')
+            for try in "$api_name" "$package_id"; do
+              code=$(curl -sS -o /tmp/del.json -w "%{http_code}" -X DELETE \
+                -H "Authorization: Bearer ${{ github.token }}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/orgs/${ORG}/packages/nuget/${try}")
+              echo "DELETE ${package_id} (${try}) -> HTTP ${code}"
+              [ "$code" = "204" ] && break
+            done
+          done
+
+      - uses: Novolis-Platform/novolis-workflows/actions/pack@main
+      - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
+      - uses: Novolis-Platform/novolis-workflows/actions/verify-packages-public@main
