@@ -1,32 +1,29 @@
 # novolis-workflows
 
-Shared GitHub Actions for Novolis package repos. Repo workflows are thin triggers; logic lives here.
+Shared GitHub Actions for Novolis package repos.
+
+## Version format
+
+**`YEAR.MAJOR.MINOR.BUILD`** — four numeric segments only (no `-ci`, no `+metadata`).
+
+Example: `2026.1.1.351` where `351` = `github.run_number`.
+
+- Intent: `build/version.json` (`year`, `major`, `minor`)
+- Same version on GitHub Packages and nuget.org
 
 ## Reusable workflows
 
 | Workflow | Repo file | Purpose |
 |----------|-----------|---------|
 | `dotnet-pull-request.yml` | `pull-request.yml` | Restore, build, test |
-| `dotnet-merge-publish.yml` | `merge.yml` | Above + pack (`2026.1.0-ci.{run}`) + GitHub Packages |
-| `dotnet-release-publish.yml` | `release.yml` | Pack at release tag (`2026.1.0`), nuget.org, attach assets |
-
-## Versioning
-
-- Human intent: `build/version.json` per repo (`sdkYear`, `apiBreak`, `feature`).
-- CI build number: `github.run_number` only (not committed).
-- Internal GPR: `2026.1.0-ci.382`
-- Stable nuget.org: `2026.1.0` (tag `v2026.1.0` must match `version.json`).
+| `dotnet-merge-publish.yml` | `merge.yml` | Build, pack, push to GitHub Packages |
+| `dotnet-release-publish.yml` | `release.yml` | Pack, push to nuget.org |
 
 ## Composite actions
 
 | Action | Role |
 |--------|------|
-| `read-version` | Parse `build/version.json`, compute stable/ci versions and assembly metadata |
-| `dotnet-pack-versioned` | `dotnet pack` with explicit version properties |
-| `dotnet-build` | SDK setup, optional GPR auth, restore/build/test |
-| `pack` | Delegates to `read-version` + `dotnet-pack-versioned` |
-| `publish-github-packages` | Push to `nuget.pkg.github.com` with `GITHUB_TOKEN` |
-| `publish-nuget-org` | Push to nuget.org |
-| `resolve-release-version` | Validate release tag against `build/version.json` |
-
-Legacy (unused by merge): `bump-build-version`, `commit-version-bump`.
+| `read-version` | `YEAR.MAJOR.MINOR` from JSON + `BUILD` from `github.run_number` |
+| `dotnet-pack-versioned` | `dotnet pack` with full four-part version |
+| `dotnet-build` | Restore, build, optional test |
+| `publish-github-packages` / `publish-nuget-org` | Push artifacts |

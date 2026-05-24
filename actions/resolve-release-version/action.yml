@@ -1,5 +1,5 @@
 name: resolve-release-version
-description: Parse and validate release tag against build/version.json stable version
+description: Validate release tag against build/version.json (vYEAR.MAJOR.MINOR or vYEAR.MAJOR.MINOR.BUILD)
 inputs:
   version-file:
     description: Path to version.json
@@ -7,7 +7,7 @@ inputs:
     default: build/version.json
 outputs:
   version:
-    description: Stable version without v prefix
+    description: Full package version YEAR.MAJOR.MINOR.BUILD (BUILD from github.run_number)
     value: ${{ steps.out.outputs.version }}
 runs:
   using: composite
@@ -23,22 +23,28 @@ runs:
           echo "::error::This action requires release published (missing tag_name)."
           exit 1
         fi
-        VERSION="${TAG#v}"
+        TAG_VERSION="${TAG#v}"
 
         if [ ! -f "$VERSION_FILE" ]; then
           echo "::error::Missing $VERSION_FILE"
           exit 1
         fi
 
-        sdk_year=$(jq -r '.sdkYear' "$VERSION_FILE")
-        api_break=$(jq -r '.apiBreak' "$VERSION_FILE")
-        feature=$(jq -r '.feature' "$VERSION_FILE")
-        expected="${sdk_year}.${api_break}.${feature}"
+        year=$(jq -r '(.year // .sdkYear) | tonumber' "$VERSION_FILE")
+        major=$(jq -r '(.major // .apiBreak) | tonumber' "$VERSION_FILE")
+        minor=$(jq -r '(.minor // .feature) | tonumber' "$VERSION_FILE")
+        platform="${year}.${major}.${minor}"
 
-        if [ "$VERSION" != "$expected" ]; then
-          echo "::error::Release tag v${VERSION} does not match $VERSION_FILE stable version ${expected}."
+        build_num="${GITHUB_RUN_NUMBER:-0}"
+        package="${platform}.${build_num}"
+
+        if [ "$TAG_VERSION" = "$platform" ]; then
+          echo "Release tag v${TAG_VERSION} matches platform line; packing ${package}."
+        elif [ "$TAG_VERSION" = "$package" ]; then
+          echo "Release tag matches full package version ${package}."
+        else
+          echo "::error::Release tag v${TAG_VERSION} must be v${platform} or v${package} (from $VERSION_FILE + run ${build_num})."
           exit 1
         fi
 
-        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-        echo "Release version: $VERSION (validated against $VERSION_FILE)"
+        echo "version=$package" >> "$GITHUB_OUTPUT"

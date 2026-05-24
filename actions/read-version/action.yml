@@ -1,47 +1,14 @@
 name: read-version
-description: Read SDKYEAR.APIBREAK.FEATURE from build/version.json and compute CI or stable package versions
+description: Read YEAR.MAJOR.MINOR from build/version.json; BUILD from github.run_number
 inputs:
   version-file:
     description: Path to version.json
     required: false
     default: build/version.json
-  prerelease-label:
-    description: Prerelease label for merge builds (e.g. ci). Empty for stable-only package version.
-    required: false
-    default: ''
   build-number:
-    description: CI build number (github.run_number)
+    description: CI build segment (github.run_number)
     required: false
     default: ''
-  git-sha:
-    description: Full git commit SHA for informational version
-    required: false
-    default: ''
-outputs:
-  sdk-year:
-    description: SDK year segment
-    value: ${{ steps.out.outputs.sdk-year }}
-  api-break:
-    description: API break segment
-    value: ${{ steps.out.outputs.api-break }}
-  feature:
-    description: Feature segment
-    value: ${{ steps.out.outputs.feature }}
-  stable-version:
-    description: Stable 3-part version (SDKYEAR.APIBREAK.FEATURE)
-    value: ${{ steps.out.outputs.stable-version }}
-  package-version:
-    description: NuGet package version (stable or stable-prerelease.build)
-    value: ${{ steps.out.outputs.package-version }}
-  assembly-version:
-    description: AssemblyVersion (SDKYEAR.APIBREAK.0.0)
-    value: ${{ steps.out.outputs.assembly-version }}
-  file-version:
-    description: FileVersion (SDKYEAR.APIBREAK.FEATURE.BUILD)
-    value: ${{ steps.out.outputs.file-version }}
-  informational-version:
-    description: InformationalVersion
-    value: ${{ steps.out.outputs.informational-version }}
 runs:
   using: composite
   steps:
@@ -49,9 +16,7 @@ runs:
       shell: bash
       env:
         VERSION_FILE: ${{ inputs.version-file }}
-        PRERELEASE_LABEL: ${{ inputs.prerelease-label }}
         BUILD_NUMBER: ${{ inputs.build-number }}
-        GIT_SHA: ${{ inputs.git-sha }}
       run: |
         set -euo pipefail
         if [ ! -f "$VERSION_FILE" ]; then
@@ -59,42 +24,30 @@ runs:
           exit 1
         fi
 
-        sdk_year=$(jq -r '.sdkYear' "$VERSION_FILE")
-        api_break=$(jq -r '.apiBreak' "$VERSION_FILE")
-        feature=$(jq -r '.feature' "$VERSION_FILE")
-        stable="${sdk_year}.${api_break}.${feature}"
-        assembly="${sdk_year}.${api_break}.0.0"
+        year=$(jq -r '(.year // .sdkYear) | tonumber' "$VERSION_FILE")
+        major=$(jq -r '(.major // .apiBreak) | tonumber' "$VERSION_FILE")
+        minor=$(jq -r '(.minor // .feature) | tonumber' "$VERSION_FILE")
 
-        build_num="${BUILD_NUMBER:-0}"
-        if [ -z "$build_num" ] || [ "$build_num" = "0" ]; then
+        build_num="${BUILD_NUMBER:-}"
+        if [ -z "$build_num" ]; then
           build_num="${GITHUB_RUN_NUMBER:-0}"
         fi
 
-        if [ -n "$PRERELEASE_LABEL" ]; then
-          package="${stable}-${PRERELEASE_LABEL}.${build_num}"
-        else
-          package="$stable"
-        fi
-
-        file="${sdk_year}.${api_break}.${feature}.${build_num}"
-        short_sha="${GIT_SHA:0:7}"
-        if [ -z "$short_sha" ]; then
-          short_sha="${GITHUB_SHA:0:7}"
-        fi
-        info="${stable}+build.${build_num}"
-        if [ -n "$short_sha" ]; then
-          info="${info}.sha.${short_sha}"
-        fi
+        platform="${year}.${major}.${minor}"
+        package="${platform}.${build_num}"
+        assembly="${year}.${major}.0.0"
+        file="${package}"
 
         {
-          echo "sdk-year=$sdk_year"
-          echo "api-break=$api_break"
-          echo "feature=$feature"
-          echo "stable-version=$stable"
+          echo "year=$year"
+          echo "major=$major"
+          echo "minor=$minor"
+          echo "build=$build_num"
+          echo "platform-version=$platform"
           echo "package-version=$package"
           echo "assembly-version=$assembly"
           echo "file-version=$file"
-          echo "informational-version=$info"
+          echo "informational-version=$package"
         } >> "$GITHUB_OUTPUT"
 
-        echo "Stable: $stable | Package: $package | File: $file"
+        echo "Package version: $package"

@@ -16,9 +16,7 @@ runs:
       id: ver
       with:
         version-file: ${{ inputs.version-file }}
-        prerelease-label: ci
         build-number: ${{ github.run_number }}
-        git-sha: ${{ github.sha }}
 
     - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
       with:

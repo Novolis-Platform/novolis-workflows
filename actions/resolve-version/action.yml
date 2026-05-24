@@ -1,15 +1,17 @@
 name: resolve-version
-description: Read stable version from build/version.json (legacy output name)
+description: Read package version from build/version.json (legacy output name)
 outputs:
   version:
-    description: Stable SDKYEAR.APIBREAK.FEATURE
+    description: YEAR.MAJOR.MINOR.BUILD
     value: ${{ steps.out.outputs.version }}
 runs:
   using: composite
   steps:
     - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
       id: read
+      with:
+        build-number: ${{ github.run_number }}
     - id: out
       shell: bash
       run: |
-        echo "version=${{ steps.read.outputs.stable-version }}" >> "$GITHUB_OUTPUT"
+        echo "version=${{ steps.read.outputs.package-version }}" >> "$GITHUB_OUTPUT"
