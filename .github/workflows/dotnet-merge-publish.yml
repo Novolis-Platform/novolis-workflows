@@ -39,6 +39,9 @@ jobs:
       - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
         if: inputs.skip_publish == false && steps.changes.outputs.should_publish == 'true'
 
+      - uses: Novolis-Platform/novolis-workflows/actions/set-github-packages-public@main
+        if: inputs.skip_publish == false && steps.changes.outputs.should_publish == 'true'
+
       - uses: Novolis-Platform/novolis-workflows/actions/bump-build-version@main
         id: bump
         if: success() && inputs.skip_publish == false && steps.changes.outputs.should_publish == 'true'
