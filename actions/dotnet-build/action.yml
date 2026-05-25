@@ -101,7 +101,7 @@ runs:
             fi
             ran=true
             echo "Testing $proj"
-            dotnet test "$proj" --no-build -c Release
+            dotnet test --project "$proj" --no-build -c Release
           done
           if [ "$ran" = false ]; then
             echo "No test projects under tests/; skipping dotnet test."
