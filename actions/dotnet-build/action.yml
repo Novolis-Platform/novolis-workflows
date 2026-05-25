@@ -26,6 +26,14 @@ runs:
   steps:
     - uses: Novolis-Platform/novolis-workflows/actions/checkout-sibling-repos@main
 
+    - name: Materialize Git LFS objects
+      shell: bash
+      run: |
+        if [ -f .gitattributes ] && grep -q 'filter=lfs' .gitattributes 2>/dev/null; then
+          git lfs install
+          git lfs pull
+        fi
+
     - name: Checkout governance build targets (sibling layout for MSBuild imports)
       shell: bash
       run: |
