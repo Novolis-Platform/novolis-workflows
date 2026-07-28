@@ -22,6 +22,12 @@ runs:
         fi
         source="https://nuget.pkg.github.com/${OWNER}/index.json"
         for pkg in "${pkgs[@]}"; do
-          echo "Pushing $(basename "$pkg") to GitHub Packages (${OWNER})"
+          base="$(basename "$pkg")"
+          # Skip symbol packages; GitHub Packages NuGet rejects or ignores them inconsistently.
+          if [[ "$base" == *.symbols.nupkg ]] || [[ "$base" == *.snupkg ]]; then
+            echo "Skipping symbols package $base"
+            continue
+          fi
+          echo "Pushing $base to GitHub Packages (${OWNER})"
           dotnet nuget push "$pkg" --source "$source" --api-key "${{ github.token }}" --skip-duplicate
         done
