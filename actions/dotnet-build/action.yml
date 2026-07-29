@@ -89,7 +89,7 @@ runs:
         fi
 
         if [ -f build/.novolis-documentation-complete ]; then
-          echo "Running documentation audit (strict)..."
+          echo "Running documentation audit (strict) before tests..."
           pwsh -NoProfile -File ../novolis-governance/scripts/doc-audit.ps1 \
             -RepoRoot "${{ github.workspace }}" -RequireDocumentationProps
         fi
@@ -109,6 +109,7 @@ runs:
             fi
             ran=true
             echo "Testing $proj"
+            # set -e: first failing host fails the job before later hosts or pack.
             dotnet test --project "$proj" --no-build -c Release
           done
           if [ "$ran" = false ]; then
