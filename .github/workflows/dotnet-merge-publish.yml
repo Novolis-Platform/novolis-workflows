@@ -54,7 +54,7 @@ jobs:
               - 'src/**'
               - 'codegen/**'
               - 'tests/**'
-              - 'samples/**'
+              - 'tools/**'
               - 'scripts/**'
               - '**/*.cs'
               - '**/*.csproj'
