@@ -110,7 +110,8 @@ runs:
             ran=true
             echo "Testing $proj"
             # set -e: first failing host fails the job before later hosts or pack.
-            dotnet test --project "$proj" --no-build -c Release
+            # SDK 10 MSBuild path rejects --project; pass the csproj as a positional arg.
+            dotnet test "$proj" --no-build -c Release
           done
           if [ "$ran" = false ]; then
             echo "No test projects under tests/; skipping dotnet test."
