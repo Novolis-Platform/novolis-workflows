@@ -1,0 +1,74 @@
+name: ensure-github-release
+description: Create a GitHub Release if missing, then upload asset files
+inputs:
+  tag:
+    description: Release tag (e.g. v2026.1.1.42)
+    required: true
+  title:
+    description: Release title used when creating
+    required: true
+  assets:
+    description: Newline-separated absolute or workspace-relative file paths to upload
+    required: true
+  generate-notes:
+    description: Pass --generate-notes when creating the release
+    required: false
+    default: 'true'
+  clobber:
+    description: Pass --clobber on upload
+    required: false
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Ensure release and upload assets
+      shell: pwsh
+      env:
+        TAG: ${{ inputs.tag }}
+        TITLE: ${{ inputs.title }}
+        ASSETS: ${{ inputs.assets }}
+        GENERATE_NOTES: ${{ inputs.generate-notes }}
+        CLOBBER: ${{ inputs.clobber }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        if ([string]::IsNullOrWhiteSpace($env:TAG)) {
+          throw "ensure-github-release requires inputs.tag."
+        }
+
+        $paths = [System.Collections.Generic.List[string]]::new()
+        foreach ($raw in ($env:ASSETS -split '\r?\n')) {
+          $path = $raw.Trim()
+          if ([string]::IsNullOrWhiteSpace($path)) { continue }
+          if (-not [System.IO.Path]::IsPathRooted($path)) {
+            $path = Join-Path $env:GITHUB_WORKSPACE $path
+          }
+          if (-not (Test-Path -LiteralPath $path)) {
+            throw "Release asset not found: $path"
+          }
+          $paths.Add($path)
+        }
+        if ($paths.Count -eq 0) {
+          throw "No assets provided to ensure-github-release."
+        }
+
+        gh release view $env:TAG 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          $createArgs = @('release', 'create', $env:TAG, '--title', $env:TITLE)
+          if ($env:GENERATE_NOTES -eq 'true') {
+            $createArgs += '--generate-notes'
+          }
+          & gh @createArgs
+          if ($LASTEXITCODE -ne 0) {
+            throw "gh release create failed with exit code $LASTEXITCODE."
+          }
+        }
+
+        $uploadArgs = @('release', 'upload', $env:TAG) + $paths.ToArray()
+        if ($env:CLOBBER -eq 'true') {
+          $uploadArgs += '--clobber'
+        }
+        & gh @uploadArgs
+        if ($LASTEXITCODE -ne 0) {
+          throw "gh release upload failed with exit code $LASTEXITCODE."
+        }

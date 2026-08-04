@@ -55,8 +55,16 @@ Example: `2026.1.1.351` where `351` = `github.run_number`.
 
 | Action | Role |
 |--------|------|
+| `setup-dotnet` | Install .NET SDK |
+| `authenticate-github-packages` | Add GPR source with `GITHUB_TOKEN` (or PAT) |
+| `checkout-sibling-repos` | Multi-repo checkout layout for CI |
 | `read-version` | `YEAR.MAJOR.MINOR` from JSON + `BUILD` from `github.run_number` |
-| `dotnet-pack-versioned` | `dotnet pack` with full four-part version |
+| `resolve-release-version` | Validate release tag against `version.json` |
 | `dotnet-build` | Restore, build, optional test |
+| `dotnet-pack-versioned` | `dotnet pack` with full four-part version |
 | `publish-github-packages` / `publish-nuget-org` | Push artifacts |
+| `upload-release-packages` | Attach `.nupkg`/`.snupkg` to an existing GitHub Release |
+| `install-inno-setup` | Chocolatey install Inno Setup 6; output `iscc-path` |
+| `write-sha256sums` | Write `SHA256SUMS.txt` for a file list |
+| `ensure-github-release` | Create GitHub Release if missing, then upload assets |
 

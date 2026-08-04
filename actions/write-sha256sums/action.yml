@@ -1,0 +1,50 @@
+name: write-sha256sums
+description: Write a SHA256SUMS.txt for the given files (utf8NoBOM)
+inputs:
+  files:
+    description: Newline-separated absolute or workspace-relative file paths to hash
+    required: true
+  output-path:
+    description: Path for SHA256SUMS.txt
+    required: false
+    default: artifacts/SHA256SUMS.txt
+outputs:
+  path:
+    description: Absolute path to the written SHA256SUMS.txt
+    value: ${{ steps.write.outputs.path }}
+runs:
+  using: composite
+  steps:
+    - id: write
+      shell: pwsh
+      env:
+        FILES: ${{ inputs.files }}
+        OUTPUT_PATH: ${{ inputs.output-path }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $lines = [System.Collections.Generic.List[string]]::new()
+        foreach ($raw in ($env:FILES -split '\r?\n')) {
+          $path = $raw.Trim()
+          if ([string]::IsNullOrWhiteSpace($path)) { continue }
+          if (-not [System.IO.Path]::IsPathRooted($path)) {
+            $path = Join-Path $env:GITHUB_WORKSPACE $path
+          }
+          if (-not (Test-Path -LiteralPath $path)) {
+            throw "File not found for SHA256SUMS: $path"
+          }
+          $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+          $name = [System.IO.Path]::GetFileName($path)
+          $lines.Add("$hash  $name")
+        }
+        if ($lines.Count -eq 0) {
+          throw "No files provided to write-sha256sums."
+        }
+
+        $out = $env:OUTPUT_PATH
+        if (-not [System.IO.Path]::IsPathRooted($out)) {
+          $out = Join-Path $env:GITHUB_WORKSPACE $out
+        }
+        New-Item -ItemType Directory -Force -Path (Split-Path $out) | Out-Null
+        $lines | Set-Content -Path $out -Encoding utf8NoBOM
+        "path=$out" | Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8NoBOM
+        Write-Host "Wrote $($lines.Count) checksum(s) to $out"
