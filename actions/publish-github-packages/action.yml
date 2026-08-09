@@ -21,6 +21,7 @@ runs:
           exit 1
         fi
         source="https://nuget.pkg.github.com/${OWNER}/index.json"
+        failed=0
         for pkg in "${pkgs[@]}"; do
           base="$(basename "$pkg")"
           # Skip symbol packages; GitHub Packages NuGet rejects or ignores them inconsistently.
@@ -29,5 +30,13 @@ runs:
             continue
           fi
           echo "Pushing $base to GitHub Packages (${OWNER})"
-          dotnet nuget push "$pkg" --source "$source" --api-key "${{ github.token }}" --skip-duplicate
+          if ! dotnet nuget push "$pkg" --source "$source" --api-key "${{ github.token }}" --skip-duplicate; then
+            # Cross-repo package linkage (403) or transient auth must not abort the rest of the batch.
+            echo "::warning::Failed to push $base (continuing remaining packages)"
+            failed=1
+          fi
         done
+        if [ "$failed" -ne 0 ]; then
+          echo "::error::One or more package pushes failed"
+          exit 1
+        fi
