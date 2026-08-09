@@ -30,11 +30,25 @@ runs:
             continue
           fi
           echo "Pushing $base to GitHub Packages (${OWNER})"
-          if ! dotnet nuget push "$pkg" --source "$source" --api-key "${{ github.token }}" --skip-duplicate; then
-            # Cross-repo package linkage (403) or transient auth must not abort the rest of the batch.
-            echo "::warning::Failed to push $base (continuing remaining packages)"
-            failed=1
+          push_out="$(mktemp)"
+          set +e
+          dotnet nuget push "$pkg" --source "$source" --api-key "${{ github.token }}" --skip-duplicate >"$push_out" 2>&1
+          push_rc=$?
+          set -e
+          cat "$push_out"
+          if [ "$push_rc" -eq 0 ]; then
+            rm -f "$push_out"
+            continue
           fi
+          # GitHub Packages often returns Conflict for duplicates even with --skip-duplicate.
+          if grep -qiE 'already been pushed|Conflict|409 \(Conflict\)' "$push_out"; then
+            echo "Duplicate $base — treating as success"
+            rm -f "$push_out"
+            continue
+          fi
+          echo "::warning::Failed to push $base (continuing remaining packages)"
+          failed=1
+          rm -f "$push_out"
         done
         if [ "$failed" -ne 0 ]; then
           echo "::error::One or more package pushes failed"
