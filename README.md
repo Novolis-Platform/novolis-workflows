@@ -11,7 +11,7 @@
 
 <p align="center">
   <strong>Reusable GitHub Actions</strong><br/>
-  Reusable CI workflows for build, pack, and release across Novolis repos.
+  Reusable CI workflows for build, pack, release, and MAUI applications across Novolis repos.
 </p>
 
 <p align="center">
@@ -35,7 +35,7 @@
 <!-- novolis-marketing:end -->
 # novolis-workflows
 
-Shared GitHub Actions for Novolis package repos.
+Shared GitHub Actions for Novolis package and application repos.
 
 ## Version format
 
@@ -53,6 +53,21 @@ Example: `2026.1.1.351` where `351` = `github.run_number`.
 | `dotnet-pull-request.yml` | `pull-request.yml` | Restore, build, test |
 | `dotnet-merge-publish.yml` | `merge.yml` | Build, pack, push to GitHub Packages |
 | `dotnet-release-publish.yml` | `release.yml` | Pack, push to nuget.org |
+| `maui-pull-request.yml` | application PR workflow | Build .NET 10 MAUI Android + Windows and optional core tests |
+| `maui-release.yml` | application release workflow | Produce signed Android APK + Windows MSIX, SHA256 sums, and attach to a GitHub release |
+
+### MAUI release secrets
+
+Callers of `maui-release.yml` provide these through `secrets: inherit` or an explicit mapping:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_PASSWORD`
+- `WINDOWS_CERTIFICATE_BASE64`
+- `WINDOWS_CERTIFICATE_PASSWORD`
+
+The workflow deliberately does not generate ephemeral signing identities. Release artifacts keep stable application identities across versions.
 
 ## Composite actions
 
@@ -70,4 +85,3 @@ Example: `2026.1.1.351` where `351` = `github.run_number`.
 | `install-inno-setup` | Chocolatey install Inno Setup 6; output `iscc-path` |
 | `write-sha256sums` | Write `SHA256SUMS.txt` for a file list |
 | `ensure-github-release` | Create GitHub Release if missing, then upload assets |
-

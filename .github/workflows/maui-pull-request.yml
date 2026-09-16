@@ -1,0 +1,74 @@
+name: maui-pull-request
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: MAUI project path
+        required: true
+        type: string
+      test-project:
+        description: Optional non-MAUI test project path
+        required: false
+        type: string
+        default: ''
+      dotnet-version:
+        required: false
+        type: string
+        default: '10.0.x'
+      android-framework:
+        required: false
+        type: string
+        default: 'net10.0-android'
+      windows-framework:
+        required: false
+        type: string
+        default: 'net10.0-windows10.0.19041.0'
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: maui-pr-${{ github.workflow }}-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    if: ${{ inputs.test-project != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - run: dotnet test "${{ inputs.test-project }}" -c Release
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - name: Install Android workload
+        run: dotnet workload install maui-android
+      - name: Build Android
+        run: dotnet build "${{ inputs.project }}" -f "${{ inputs.android-framework }}" -c Release
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - name: Install Windows workload
+        shell: pwsh
+        run: dotnet workload install maui-windows
+      - name: Build Windows
+        shell: pwsh
+        run: dotnet build "${{ inputs.project }}" -f "${{ inputs.windows-framework }}" -c Release

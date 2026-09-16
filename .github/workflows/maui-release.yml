@@ -1,0 +1,146 @@
+name: maui-release
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: MAUI project path
+        required: true
+        type: string
+      artifact-prefix:
+        description: Release asset prefix
+        required: true
+        type: string
+      dotnet-version:
+        required: false
+        type: string
+        default: '10.0.x'
+      android-framework:
+        required: false
+        type: string
+        default: 'net10.0-android'
+      windows-framework:
+        required: false
+        type: string
+        default: 'net10.0-windows10.0.19041.0'
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: true
+      ANDROID_KEY_ALIAS:
+        required: true
+      ANDROID_KEYSTORE_PASSWORD:
+        required: true
+      ANDROID_KEY_PASSWORD:
+        required: true
+      WINDOWS_CERTIFICATE_BASE64:
+        required: true
+      WINDOWS_CERTIFICATE_PASSWORD:
+        required: true
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - run: dotnet workload install maui-android
+      - name: Publish signed APK
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          key_store="$RUNNER_TEMP/novolis-android.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$key_store"
+          dotnet publish "${{ inputs.project }}" \
+            -f "${{ inputs.android-framework }}" \
+            -c Release \
+            -p:AndroidPackageFormats=apk \
+            -p:AndroidKeyStore=true \
+            -p:AndroidSigningKeyStore="$key_store" \
+            -p:AndroidSigningKeyAlias="$ANDROID_KEY_ALIAS" \
+            -p:AndroidSigningStorePass="$ANDROID_KEYSTORE_PASSWORD" \
+            -p:AndroidSigningKeyPass="$ANDROID_KEY_PASSWORD"
+          apk="$(find . -path '*/bin/Release/*/publish/*-Signed.apk' -o -path '*/bin/Release/*/*-Signed.apk' | head -n 1)"
+          test -n "$apk"
+          cp "$apk" "artifacts/${{ inputs.artifact-prefix }}-android.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: artifacts/*
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - name: Install Windows workload
+        shell: pwsh
+        run: dotnet workload install maui-windows
+      - name: Publish signed MSIX
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $certPath = Join-Path $env:RUNNER_TEMP 'novolis-windows.pfx'
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+          dotnet publish "${{ inputs.project }}" `
+            -f "${{ inputs.windows-framework }}" `
+            -c Release `
+            -p:RuntimeIdentifier=win-x64 `
+            -p:GenerateAppxPackageOnBuild=true `
+            -p:AppxPackageSigningEnabled=true `
+            -p:PackageCertificateKeyFile="$certPath" `
+            -p:PackageCertificatePassword="$env:WINDOWS_CERTIFICATE_PASSWORD"
+          $msix = Get-ChildItem -Recurse -Filter *.msix | Select-Object -First 1
+          if ($null -eq $msix) { throw 'No MSIX produced.' }
+          Copy-Item $msix.FullName "artifacts/${{ inputs.artifact-prefix }}-win-x64.msix"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: artifacts/*
+          if-no-files-found: error
+
+  publish:
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-release'
+          path: artifacts
+          merge-multiple: true
+      - name: Write SHA256SUMS
+        shell: bash
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS
+      - uses: Novolis-Platform/novolis-workflows/actions/ensure-github-release@main
+        with:
+          tag: ${{ github.ref_name }}
+          title: ${{ github.ref_name }}
+          assets: |
+            artifacts/${{ inputs.artifact-prefix }}-android.apk
+            artifacts/${{ inputs.artifact-prefix }}-win-x64.msix
+            artifacts/SHA256SUMS
+          generate-notes: 'false'
+          clobber: 'true'
