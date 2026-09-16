@@ -56,7 +56,11 @@ jobs:
       - name: Install Android workload
         run: dotnet workload install maui-android
       - name: Build Android
-        run: dotnet build "${{ inputs.project }}" -f "${{ inputs.android-framework }}" -c Release
+        run: >-
+          dotnet build "${{ inputs.project }}"
+          -f "${{ inputs.android-framework }}"
+          -c Release
+          -p:TargetFrameworks="${{ inputs.android-framework }}"
 
   windows:
     runs-on: windows-latest
@@ -71,4 +75,8 @@ jobs:
         run: dotnet workload install maui-windows
       - name: Build Windows
         shell: pwsh
-        run: dotnet build "${{ inputs.project }}" -f "${{ inputs.windows-framework }}" -c Release
+        run: >-
+          dotnet build "${{ inputs.project }}"
+          -f "${{ inputs.windows-framework }}"
+          -c Release
+          -p:TargetFrameworks="${{ inputs.windows-framework }}"
