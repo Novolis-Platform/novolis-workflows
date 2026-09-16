@@ -60,7 +60,7 @@ jobs:
           dotnet build "${{ inputs.project }}"
           -f "${{ inputs.android-framework }}"
           -c Release
-          -p:TargetFrameworks="${{ inputs.android-framework }}"
+          -p:NovolisMauiTargetFrameworks="${{ inputs.android-framework }}"
 
   windows:
     runs-on: windows-latest
@@ -79,4 +79,4 @@ jobs:
           dotnet build "${{ inputs.project }}"
           -f "${{ inputs.windows-framework }}"
           -c Release
-          -p:TargetFrameworks="${{ inputs.windows-framework }}"
+          -p:NovolisMauiTargetFrameworks="${{ inputs.windows-framework }}"
