@@ -23,19 +23,19 @@ on:
         required: false
         type: string
         default: 'net10.0-windows10.0.19041.0'
+      windows-runtime-identifier:
+        required: false
+        type: string
+        default: 'win-x64'
     secrets:
       ANDROID_KEYSTORE_BASE64:
-        required: true
+        required: false
       ANDROID_KEY_ALIAS:
-        required: true
+        required: false
       ANDROID_KEYSTORE_PASSWORD:
-        required: true
+        required: false
       ANDROID_KEY_PASSWORD:
-        required: true
-      WINDOWS_CERTIFICATE_BASE64:
-        required: true
-      WINDOWS_CERTIFICATE_PASSWORD:
-        required: true
+        required: false
 
 permissions:
   contents: write
@@ -51,7 +51,7 @@ jobs:
           dotnet-version: ${{ inputs.dotnet-version }}
       - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
       - run: dotnet workload install maui-android
-      - name: Publish signed APK
+      - name: Publish installable APK
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -62,7 +62,29 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts
           key_store="$RUNNER_TEMP/novolis-android.keystore"
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$key_store"
+
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEY_ALIAS" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_PASSWORD" ]; then
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$key_store"
+            key_alias="$ANDROID_KEY_ALIAS"
+            store_pass="$ANDROID_KEYSTORE_PASSWORD"
+            key_pass="$ANDROID_KEY_PASSWORD"
+            echo "Using configured Android release signing key."
+          else
+            key_alias="novolis-adhoc"
+            store_pass="novolis-adhoc-release"
+            key_pass="$store_pass"
+            keytool -genkeypair \
+              -keystore "$key_store" \
+              -alias "$key_alias" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "$store_pass" \
+              -keypass "$key_pass" \
+              -dname "CN=Novolis Ad Hoc Release,O=Novolis,C=NO"
+            echo "::warning::No persistent Android signing key configured. This APK is installable, but future releases need the same key for in-place upgrades."
+          fi
+
           dotnet publish "${{ inputs.project }}" \
             -f "${{ inputs.android-framework }}" \
             -c Release \
@@ -70,16 +92,17 @@ jobs:
             -p:AndroidPackageFormats=apk \
             -p:AndroidKeyStore=true \
             -p:AndroidSigningKeyStore="$key_store" \
-            -p:AndroidSigningKeyAlias="$ANDROID_KEY_ALIAS" \
-            -p:AndroidSigningStorePass="$ANDROID_KEYSTORE_PASSWORD" \
-            -p:AndroidSigningKeyPass="$ANDROID_KEY_PASSWORD"
-          apk="$(find . -path '*/bin/Release/*/publish/*-Signed.apk' -o -path '*/bin/Release/*/*-Signed.apk' | head -n 1)"
+            -p:AndroidSigningKeyAlias="$key_alias" \
+            -p:AndroidSigningStorePass="$store_pass" \
+            -p:AndroidSigningKeyPass="$key_pass"
+
+          apk="$(find . -type f -name '*-Signed.apk' -path '*/bin/Release/*' | head -n 1)"
           test -n "$apk"
           cp "$apk" "artifacts/${{ inputs.artifact-prefix }}-android.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: android-release
-          path: artifacts/*
+          path: artifacts/${{ inputs.artifact-prefix }}-android.apk
           if-no-files-found: error
 
   windows:
@@ -93,32 +116,39 @@ jobs:
       - name: Install Windows workload
         shell: pwsh
         run: dotnet workload install maui-windows
-      - name: Publish signed MSIX
+      - name: Publish self-contained single-file EXE
         shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          $certPath = Join-Path $env:RUNNER_TEMP 'novolis-windows.pfx'
-          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+
           dotnet publish "${{ inputs.project }}" `
             -f "${{ inputs.windows-framework }}" `
             -c Release `
             -p:NovolisMauiTargetFrameworks="${{ inputs.windows-framework }}" `
-            -p:RuntimeIdentifier=win-x64 `
-            -p:GenerateAppxPackageOnBuild=true `
-            -p:AppxPackageSigningEnabled=true `
-            -p:PackageCertificateKeyFile="$certPath" `
-            -p:PackageCertificatePassword="$env:WINDOWS_CERTIFICATE_PASSWORD"
-          $msix = Get-ChildItem -Recurse -Filter *.msix | Select-Object -First 1
-          if ($null -eq $msix) { throw 'No MSIX produced.' }
-          Copy-Item $msix.FullName "artifacts/${{ inputs.artifact-prefix }}-win-x64.msix"
+            -p:RuntimeIdentifierOverride="${{ inputs.windows-runtime-identifier }}" `
+            -p:WindowsPackageType=None `
+            -p:WindowsAppSDKSelfContained=true `
+            -p:SelfContained=true `
+            -p:EnableMsixTooling=true `
+            -p:IncludeAllContentForSelfExtract=true `
+            -p:PublishSingleFile=true `
+            -p:PublishTrimmed=false
+
+          $exe = Get-ChildItem -Recurse -Path . -Filter "$([IO.Path]::GetFileNameWithoutExtension('${{ inputs.artifact-prefix }}')).exe" |
+            Where-Object { $_.FullName -match '[\\/]publish[\\/]' } |
+            Select-Object -First 1
+          if ($null -eq $exe) {
+            $exe = Get-ChildItem -Recurse -Path . -Filter *.exe |
+              Where-Object { $_.FullName -match '[\\/]publish[\\/]' -and $_.Name -notmatch 'createdump|WindowsAppRuntime' } |
+              Select-Object -First 1
+          }
+          if ($null -eq $exe) { throw 'No published application EXE produced.' }
+          Copy-Item $exe.FullName "artifacts/${{ inputs.artifact-prefix }}.exe"
       - uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: artifacts/*
+          path: artifacts/${{ inputs.artifact-prefix }}.exe
           if-no-files-found: error
 
   publish:
@@ -142,7 +172,7 @@ jobs:
           title: ${{ github.ref_name }}
           assets: |
             artifacts/${{ inputs.artifact-prefix }}-android.apk
-            artifacts/${{ inputs.artifact-prefix }}-win-x64.msix
+            artifacts/${{ inputs.artifact-prefix }}.exe
             artifacts/SHA256SUMS
-          generate-notes: 'false'
+          generate-notes: 'true'
           clobber: 'true'
