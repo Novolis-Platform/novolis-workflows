@@ -11,6 +11,11 @@ on:
         description: Release asset prefix
         required: true
         type: string
+      release-tag:
+        description: Explicit GitHub Release tag. Defaults to the triggering ref name.
+        required: false
+        type: string
+        default: ''
       dotnet-version:
         required: false
         type: string
@@ -168,8 +173,8 @@ jobs:
           sha256sum * > SHA256SUMS
       - uses: Novolis-Platform/novolis-workflows/actions/ensure-github-release@main
         with:
-          tag: ${{ github.ref_name }}
-          title: ${{ github.ref_name }}
+          tag: ${{ inputs.release-tag != '' && inputs.release-tag || github.ref_name }}
+          title: ${{ inputs.release-tag != '' && inputs.release-tag || github.ref_name }}
           assets: |
             artifacts/${{ inputs.artifact-prefix }}-android.apk
             artifacts/${{ inputs.artifact-prefix }}.exe
