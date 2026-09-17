@@ -12,6 +12,11 @@ on:
         required: false
         type: string
         default: ''
+      ui-test-project:
+        description: Optional Appium/UI test project to compile without executing
+        required: false
+        type: string
+        default: ''
       dotnet-version:
         required: false
         type: string
@@ -44,6 +49,18 @@ jobs:
           dotnet-version: ${{ inputs.dotnet-version }}
       - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
       - run: dotnet test "${{ inputs.test-project }}" -c Release
+
+  ui-test-compile:
+    if: ${{ inputs.ui-test-project != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - name: Compile UI smoke tests
+        run: dotnet build "${{ inputs.ui-test-project }}" -c Release
 
   android:
     runs-on: ubuntu-latest
