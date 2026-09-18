@@ -11,7 +11,7 @@
 
 <p align="center">
   <strong>Reusable GitHub Actions</strong><br/>
-  Reusable CI workflows for build, pack, release, and MAUI applications across Novolis repos.
+  Reusable CI workflows for build, pack, and release across Novolis repos.
 </p>
 
 <p align="center">
@@ -85,3 +85,4 @@ The workflow deliberately does not generate ephemeral signing identities. Releas
 | `install-inno-setup` | Chocolatey install Inno Setup 6; output `iscc-path` |
 | `write-sha256sums` | Write `SHA256SUMS.txt` for a file list |
 | `ensure-github-release` | Create GitHub Release if missing, then upload assets |
+
