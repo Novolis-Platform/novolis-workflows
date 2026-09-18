@@ -54,6 +54,15 @@ runs:
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
+    - name: Install Android workload when the repository targets Android
+      shell: bash
+      run: |
+        set -euo pipefail
+        if grep -R -l --include='*.csproj' \
+          -E '<TargetFrameworks?>[^<]*net[0-9.]+-android' . >/dev/null 2>&1; then
+          dotnet workload install android
+        fi
+
     - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
       with:
         token: ${{ inputs.packages_token != '' && inputs.packages_token || github.token }}
