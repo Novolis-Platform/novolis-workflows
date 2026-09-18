@@ -13,6 +13,10 @@ inputs:
     description: Run dotnet test after build
     required: false
     default: 'true'
+  test_projects:
+    description: Optional semicolon-separated test project paths. When set, only these projects are tested instead of scanning tests/.
+    required: false
+    default: ''
   packages_token:
     description: Optional read:packages token for private cross-repo restore
     required: false
@@ -59,6 +63,7 @@ runs:
       env:
         SOLUTION: ${{ inputs.solution }}
         RUN_TESTS: ${{ inputs.run_tests }}
+        TEST_PROJECTS: ${{ inputs.test_projects }}
         SKIP_DOGFOOD: ${{ inputs.skip_dogfood_prepare }}
       run: |
         set -euo pipefail
@@ -97,22 +102,33 @@ runs:
         if [ "$RUN_TESTS" = "true" ]; then
           shopt -s nullglob
           ran=false
-          for proj in tests/*/*.csproj tests/**/*.csproj; do
-            [ -f "$proj" ] || continue
-            is_test="$(dotnet msbuild "$proj" -getProperty:IsTestProject -nologo -v:q 2>/dev/null | tr -d '[:space:]')"
-            if [ "$is_test" != "true" ]; then
-              continue
-            fi
-            # tests/ folder marks support libraries as IsTestProject; only run real test hosts.
-            if ! grep -qE 'TUnit|Microsoft\.NET\.Test\.Sdk|xunit|NUnit' "$proj" 2>/dev/null; then
-              continue
-            fi
-            ran=true
-            echo "Testing $proj"
-            # set -e: first failing host fails the job before later hosts or pack.
-            # SDK 10 MSBuild path rejects --project; pass the csproj as a positional arg.
-            dotnet test "$proj" --no-build -c Release
-          done
+          if [ -n "${TEST_PROJECTS:-}" ]; then
+            IFS=';' read -ra scoped <<< "$TEST_PROJECTS"
+            for proj in "${scoped[@]}"; do
+              [ -n "$proj" ] || continue
+              [ -f "$proj" ] || continue
+              ran=true
+              echo "Testing $proj"
+              dotnet test "$proj" --no-build -c Release
+            done
+          else
+            for proj in tests/*/*.csproj tests/**/*.csproj; do
+              [ -f "$proj" ] || continue
+              is_test="$(dotnet msbuild "$proj" -getProperty:IsTestProject -nologo -v:q 2>/dev/null | tr -d '[:space:]')"
+              if [ "$is_test" != "true" ]; then
+                continue
+              fi
+              # tests/ folder marks support libraries as IsTestProject; only run real test hosts.
+              if ! grep -qE 'TUnit|Microsoft\.NET\.Test\.Sdk|xunit|NUnit' "$proj" 2>/dev/null; then
+                continue
+              fi
+              ran=true
+              echo "Testing $proj"
+              # set -e: first failing host fails the job before later hosts or pack.
+              # SDK 10 MSBuild path rejects --project; pass the csproj as a positional arg.
+              dotnet test "$proj" --no-build -c Release
+            done
+          fi
           if [ "$ran" = false ]; then
             echo "No test projects under tests/; skipping dotnet test."
           fi

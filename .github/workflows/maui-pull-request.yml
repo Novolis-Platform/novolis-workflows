@@ -29,6 +29,11 @@ on:
         required: false
         type: string
         default: 'net10.0-windows10.0.19041.0'
+      build_windows:
+        description: When false, skip the Windows MAUI workload job (Android-shipping / Windows-local products).
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -80,6 +85,7 @@ jobs:
           -p:NovolisMauiTargetFrameworks="${{ inputs.android-framework }}"
 
   windows:
+    if: ${{ inputs.build_windows }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

@@ -32,6 +32,11 @@ on:
         required: false
         type: string
         default: 'win-x64'
+      publish_windows:
+        description: When false, ship Android APK only (Windows remains local).
+        required: false
+        type: boolean
+        default: true
     secrets:
       ANDROID_KEYSTORE_BASE64:
         required: false
@@ -111,6 +116,7 @@ jobs:
           if-no-files-found: error
 
   windows:
+    if: ${{ inputs.publish_windows }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -158,6 +164,7 @@ jobs:
 
   publish:
     needs: [android, windows]
+    if: always() && needs.android.result == 'success' && (needs.windows.result == 'success' || needs.windows.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -171,13 +178,22 @@ jobs:
         run: |
           cd artifacts
           sha256sum * > SHA256SUMS
+      - name: Select release assets
+        id: assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          list="artifacts/${{ inputs.artifact-prefix }}-android.apk"$'\n'"artifacts/SHA256SUMS"
+          if [ -f "artifacts/${{ inputs.artifact-prefix }}.exe" ]; then
+            list="$list"$'\n'"artifacts/${{ inputs.artifact-prefix }}.exe"
+          fi
+          echo "list<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$list" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
       - uses: Novolis-Platform/novolis-workflows/actions/ensure-github-release@main
         with:
           tag: ${{ inputs.release-tag != '' && inputs.release-tag || github.ref_name }}
           title: ${{ inputs.release-tag != '' && inputs.release-tag || github.ref_name }}
-          assets: |
-            artifacts/${{ inputs.artifact-prefix }}-android.apk
-            artifacts/${{ inputs.artifact-prefix }}.exe
-            artifacts/SHA256SUMS
+          assets: ${{ steps.assets.outputs.list }}
           generate-notes: 'true'
           clobber: 'true'
