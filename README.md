@@ -85,4 +85,11 @@ The workflow deliberately does not generate ephemeral signing identities. Releas
 | `install-inno-setup` | Chocolatey install Inno Setup 6; output `iscc-path` |
 | `write-sha256sums` | Write `SHA256SUMS.txt` for a file list |
 | `ensure-github-release` | Create GitHub Release if missing, then upload assets |
+| `upload-google-play-bundle` | Upload a signed Android App Bundle to a Google Play track through the Android Publisher API |
+
+`upload-google-play-bundle` is a PowerShell composite action and does not
+require Node, Python, or a third-party publishing runtime. Callers provide a
+temporary service-account JSON path and select the Play track. Production
+rollouts may set a fraction below `1`; internal, closed, and open tracks must
+use a completed release.
 

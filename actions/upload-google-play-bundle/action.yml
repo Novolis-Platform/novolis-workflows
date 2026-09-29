@@ -1,0 +1,228 @@
+name: upload-google-play-bundle
+description: Upload a signed Android App Bundle to a Google Play track without a third-party runtime
+inputs:
+  package-name:
+    description: Android application package name
+    required: true
+  bundle:
+    description: Path to the signed Android App Bundle
+    required: true
+  service-account-json-path:
+    description: Path to the Google Play service-account JSON file
+    required: true
+  track:
+    description: Google Play track
+    required: false
+    default: internal
+  user-fraction:
+    description: Production rollout fraction from 0 to 1
+    required: false
+    default: '1'
+  release-name:
+    description: Optional Play release name
+    required: false
+    default: ''
+outputs:
+  version-code:
+    description: Version code accepted by Google Play
+    value: ${{ steps.upload.outputs.version-code }}
+runs:
+  using: composite
+  steps:
+    - name: Upload Android App Bundle
+      id: upload
+      shell: pwsh
+      env:
+        PACKAGE_NAME: ${{ inputs.package-name }}
+        BUNDLE_PATH: ${{ inputs.bundle }}
+        SERVICE_ACCOUNT_JSON_PATH: ${{ inputs.service-account-json-path }}
+        TRACK: ${{ inputs.track }}
+        USER_FRACTION: ${{ inputs.user-fraction }}
+        RELEASE_NAME: ${{ inputs.release-name }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+
+        function ConvertTo-Base64Url {
+          param([Parameter(Mandatory)][byte[]]$Bytes)
+          [Convert]::ToBase64String($Bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        }
+
+        function Invoke-PlayApi {
+          param(
+            [Parameter(Mandatory)][ValidateSet('POST', 'PUT')][string]$Method,
+            [Parameter(Mandatory)][string]$Uri,
+            [Parameter(Mandatory)][string]$AccessToken,
+            [string]$JsonBody,
+            [string]$InputFile,
+            [string]$ContentType = 'application/json'
+          )
+
+          $headers = @{ Authorization = "Bearer $AccessToken" }
+          try {
+            if ($InputFile) {
+              return Invoke-RestMethod `
+                -Method $Method `
+                -Uri $Uri `
+                -Headers $headers `
+                -ContentType $ContentType `
+                -InFile $InputFile
+            }
+
+            if ($null -ne $JsonBody) {
+              return Invoke-RestMethod `
+                -Method $Method `
+                -Uri $Uri `
+                -Headers $headers `
+                -ContentType $ContentType `
+                -Body $JsonBody
+            }
+
+            return Invoke-RestMethod `
+              -Method $Method `
+              -Uri $Uri `
+              -Headers $headers
+          }
+          catch {
+            throw "Google Play API request failed ($Method $Uri): $($_.Exception.Message)"
+          }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($env:PACKAGE_NAME)) {
+          throw 'package-name is required.'
+        }
+        if ($env:PACKAGE_NAME -notmatch '^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+$') {
+          throw "Invalid Android package name: $($env:PACKAGE_NAME)"
+        }
+        if (-not (Test-Path -LiteralPath $env:BUNDLE_PATH -PathType Leaf)) {
+          throw "Android App Bundle not found: $($env:BUNDLE_PATH)"
+        }
+        if ([IO.Path]::GetExtension($env:BUNDLE_PATH).ToLowerInvariant() -ne '.aab') {
+          throw 'Google Play delivery requires an .aab Android App Bundle.'
+        }
+        if (-not (Test-Path -LiteralPath $env:SERVICE_ACCOUNT_JSON_PATH -PathType Leaf)) {
+          throw "Google Play service-account JSON not found: $($env:SERVICE_ACCOUNT_JSON_PATH)"
+        }
+
+        $track = $env:TRACK.Trim().ToLowerInvariant()
+        if ($track -notin @('internal', 'closed', 'open', 'production')) {
+          throw "Unsupported Google Play track: $track"
+        }
+
+        [decimal]$fraction = 1
+        if (-not [string]::IsNullOrWhiteSpace($env:USER_FRACTION)) {
+          $fraction = [decimal]::Parse(
+            $env:USER_FRACTION,
+            [Globalization.NumberStyles]::Float,
+            [Globalization.CultureInfo]::InvariantCulture)
+        }
+        if ($fraction -le 0 -or $fraction -gt 1) {
+          throw 'user-fraction must be greater than 0 and no greater than 1.'
+        }
+        if ($track -ne 'production' -and $fraction -ne 1) {
+          throw 'A partial rollout is only valid for the production track.'
+        }
+
+        $serviceAccount = Get-Content -LiteralPath $env:SERVICE_ACCOUNT_JSON_PATH -Raw |
+          ConvertFrom-Json
+        if ([string]::IsNullOrWhiteSpace($serviceAccount.client_email) -or
+            [string]::IsNullOrWhiteSpace($serviceAccount.private_key)) {
+          throw 'The service-account JSON is missing client_email or private_key.'
+        }
+
+        $issuedAt = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        $jwtHeader = ConvertTo-Base64Url ([Text.Encoding]::UTF8.GetBytes('{"alg":"RS256","typ":"JWT"}'))
+        $jwtClaims = [ordered]@{
+          iss = $serviceAccount.client_email
+          scope = 'https://www.googleapis.com/auth/androidpublisher'
+          aud = 'https://oauth2.googleapis.com/token'
+          iat = $issuedAt
+          exp = $issuedAt + 3600
+        } | ConvertTo-Json -Compress
+        $jwtClaimPart = ConvertTo-Base64Url ([Text.Encoding]::UTF8.GetBytes($jwtClaims))
+        $signingInput = "$jwtHeader.$jwtClaimPart"
+
+        $rsa = [Security.Cryptography.RSA]::Create()
+        try {
+          $rsa.ImportFromPem($serviceAccount.private_key.Replace('\n', "`n"))
+          $signature = $rsa.SignData(
+            [Text.Encoding]::UTF8.GetBytes($signingInput),
+            [Security.Cryptography.HashAlgorithmName]::SHA256,
+            [Security.Cryptography.RSASignaturePadding]::Pkcs1)
+        }
+        finally {
+          $rsa.Dispose()
+        }
+
+        $assertion = "$signingInput.$(ConvertTo-Base64Url $signature)"
+        $tokenResponse = Invoke-RestMethod `
+          -Method Post `
+          -Uri 'https://oauth2.googleapis.com/token' `
+          -ContentType 'application/x-www-form-urlencoded' `
+          -Body @{
+            grant_type = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
+            assertion = $assertion
+          }
+        if ([string]::IsNullOrWhiteSpace($tokenResponse.access_token)) {
+          throw 'Google OAuth did not return an access token.'
+        }
+
+        $accessToken = $tokenResponse.access_token
+        $package = [Uri]::EscapeDataString($env:PACKAGE_NAME)
+        $apiRoot = 'https://androidpublisher.googleapis.com/androidpublisher/v3'
+        $uploadRoot = 'https://androidpublisher.googleapis.com/upload/androidpublisher/v3'
+
+        $edit = Invoke-PlayApi `
+          -Method POST `
+          -Uri "$apiRoot/applications/$package/edits" `
+          -AccessToken $accessToken `
+          -JsonBody '{}'
+        if ([string]::IsNullOrWhiteSpace($edit.id)) {
+          throw 'Google Play did not return an edit id.'
+        }
+
+        $bundle = Invoke-PlayApi `
+          -Method POST `
+          -Uri "$uploadRoot/applications/$package/edits/$($edit.id)/bundles?uploadType=media" `
+          -AccessToken $accessToken `
+          -InputFile $env:BUNDLE_PATH `
+          -ContentType 'application/octet-stream'
+        if ($null -eq $bundle.versionCode) {
+          throw 'Google Play did not return the uploaded bundle version code.'
+        }
+
+        $status = if ($track -eq 'production' -and $fraction -lt 1) {
+          'inProgress'
+        }
+        else {
+          'completed'
+        }
+        $release = [ordered]@{
+          versionCodes = @([string]$bundle.versionCode)
+          status = $status
+        }
+        if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_NAME)) {
+          $release.name = $env:RELEASE_NAME
+        }
+        if ($track -eq 'production' -and $fraction -lt 1) {
+          $release.userFraction = [double]$fraction
+        }
+        $trackBody = [ordered]@{
+          releases = @($release)
+        } | ConvertTo-Json -Depth 5 -Compress
+
+        [void](Invoke-PlayApi `
+          -Method PUT `
+          -Uri "$apiRoot/applications/$package/edits/$($edit.id)/tracks/$track" `
+          -AccessToken $accessToken `
+          -JsonBody $trackBody)
+
+        [void](Invoke-PlayApi `
+          -Method POST `
+          -Uri "$apiRoot/applications/$package/edits/$($edit.id):commit" `
+          -AccessToken $accessToken)
+
+        "version-code=$($bundle.versionCode)" | Out-File `
+          -FilePath $env:GITHUB_OUTPUT `
+          -Append `
+          -Encoding utf8
+        Write-Host "Uploaded versionCode $($bundle.versionCode) to Google Play track '$track'."
