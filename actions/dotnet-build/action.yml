@@ -104,8 +104,7 @@ runs:
 
         if [ -f build/.novolis-documentation-complete ]; then
           echo "Running documentation audit (strict) before tests..."
-          pwsh -NoProfile -File ../novolis-governance/scripts/doc-audit.ps1 \
-            -RepoRoot "${{ github.workspace }}" -RequireDocumentationProps
+          dotnet run --file ../novolis-governance/scripts/doc-audit.cs -- --repo "${{ github.workspace }}" --require-docs
         fi
 
         if [ "$RUN_TESTS" = "true" ]; then
