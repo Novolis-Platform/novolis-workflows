@@ -10,12 +10,18 @@ on:
         required: false
         type: string
         default: build/version.json
+    outputs:
+      packed:
+        description: True when packages were packed for the caller to push to nuget.org
+        value: ${{ jobs.release.outputs.packed }}
 permissions:
   contents: read
   packages: write
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      packed: ${{ steps.packed.outputs.ok }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,3 +52,13 @@ jobs:
       - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
 
       - uses: Novolis-Platform/novolis-workflows/actions/upload-release-packages@main
+
+      - id: packed
+        shell: bash
+        run: echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error

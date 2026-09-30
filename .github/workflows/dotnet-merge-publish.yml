@@ -14,10 +14,13 @@ on:
         required: false
         type: boolean
         default: false
+    outputs:
+      run_publish:
+        description: True when this run packed packages for GitHub Packages and nuget.org
+        value: ${{ jobs.detect.outputs.run_publish }}
 permissions:
   contents: read
   packages: write
-  id-token: write
 
 # Supersede rapid re-pushes to the same repo (cross-repo herds still run in parallel).
 concurrency:
@@ -134,13 +137,11 @@ jobs:
       - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
         if: needs.detect.outputs.run_publish == 'true'
 
-      - uses: NuGet/login@v1
-        id: nuget-login
+      # nuget.org login must run in the caller workflow. NuGet matches job_workflow_ref
+      # to the policy repository, and a reusable workflow's claim names novolis-workflows.
+      - uses: actions/upload-artifact@v4
         if: needs.detect.outputs.run_publish == 'true'
         with:
-          user: frankhaugen
-
-      - uses: Novolis-Platform/novolis-workflows/actions/publish-nuget-org@main
-        if: needs.detect.outputs.run_publish == 'true'
-        with:
-          api_key: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          name: nuget-packages
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error
