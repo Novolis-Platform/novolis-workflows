@@ -1,0 +1,183 @@
+name: apps-play
+on:
+  workflow_call:
+    inputs:
+      app:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
+      track:
+        required: true
+        type: string
+      user_fraction:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      package_version: ${{ steps.plan.outputs.package_version }}
+      run_number: ${{ steps.plan.outputs.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 1
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+        with:
+          dotnet-version: 10.0.x
+      - name: Resolve release tag and app matrix
+        id: plan
+        shell: bash
+        env:
+          APP_CHOICE: ${{ inputs.app }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "package_version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+            echo "run_number=${BASH_REMATCH[1]##*.}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error title=Play plan::release_tag must be vYEAR.MAJOR.MINOR.BUILD"
+            exit 1
+          fi
+          if ! dotnet run --project tools/AppsManifest/AppsManifest.csproj --no-launch-profile -- \
+            play-matrix --repo "$GITHUB_WORKSPACE" --app "$APP_CHOICE" > /tmp/google-play-matrix.json; then
+            echo "::error title=Play plan::play-matrix failed for $APP_CHOICE"
+            exit 1
+          fi
+          matrix=$(jq -c '.include' /tmp/google-play-matrix.json)
+          if [[ "$matrix" == "[]" ]]; then
+            echo "::error title=Play plan::No Google Play-enabled apps matched $APP_CHOICE"
+            exit 1
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Play plan"
+            echo ""
+            echo "Tag \`$RELEASE_TAG\` on \`${{ inputs.track }}\`"
+            echo ""
+            echo "| App | Package |"
+            echo "| --- | --- |"
+            jq -r '.include[] | "| \(.key) | \(.application_id) |"' /tmp/google-play-matrix.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  play:
+    name: play / ${{ matrix.key }}
+    needs: plan
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ format('google-play-{0}', inputs.track) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 1
+      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+        with:
+          token: ${{ github.token }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android workload
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.stack }}" = "maui" ]; then
+            workload=(dotnet workload install maui-android)
+          else
+            workload=(dotnet workload install android)
+          fi
+          if ! "${workload[@]}"; then
+            echo "::error title=play / ${{ matrix.key }}::Android workload install failed"
+            exit 1
+          fi
+      - name: Build signed bundle
+        id: bundle
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ needs.plan.outputs.package_version }}
+          RUN_NUMBER: ${{ needs.plan.outputs.run_number }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets[format('{0}_KEYSTORE_BASE64', matrix.signing_secret_key)] }}
+          ANDROID_KEY_ALIAS: ${{ secrets[format('{0}_KEY_ALIAS', matrix.signing_secret_key)] }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets[format('{0}_KEYSTORE_PASSWORD', matrix.signing_secret_key)] }}
+          ANDROID_KEY_PASSWORD: ${{ secrets[format('{0}_KEY_PASSWORD', matrix.signing_secret_key)] }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          "### play / ${{ matrix.key }}" | Add-Content $env:GITHUB_STEP_SUMMARY
+          foreach ($name in 'ANDROID_KEYSTORE_BASE64','ANDROID_KEY_ALIAS','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_PASSWORD') {
+            if ([string]::IsNullOrWhiteSpace((Get-Item "Env:$name").Value)) {
+              Write-Host "::error title=play / ${{ matrix.key }}::Missing upload-key secret $name"
+              exit 1
+            }
+          }
+          . ./scripts/Publish-NovolisApp.ps1
+          $keyStore = Join-Path $env:RUNNER_TEMP 'novolis-play-upload.keystore'
+          [IO.File]::WriteAllBytes($keyStore, [Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64))
+          $item = Publish-NovolisAndroidBundle `
+            -RepoRoot $env:GITHUB_WORKSPACE `
+            -AppKey '${{ matrix.key }}' `
+            -PackageVersion $env:PACKAGE_VERSION `
+            -RunNumber ([int]$env:RUN_NUMBER) `
+            -KeystorePath $keyStore `
+            -KeyAlias $env:ANDROID_KEY_ALIAS `
+            -KeystorePassword $env:ANDROID_KEYSTORE_PASSWORD `
+            -KeyPassword $env:ANDROID_KEY_PASSWORD
+          if (-not $item.AabPath) {
+            Write-Host '::error title=play / ${{ matrix.key }}::No Android App Bundle was produced'
+            exit 1
+          }
+          "bundle_path=$($item.AabPath)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: google-play-${{ matrix.key }}-${{ needs.plan.outputs.package_version }}
+          path: ${{ steps.bundle.outputs.bundle_path }}
+          if-no-files-found: error
+      - name: Write Google Play service-account credentials
+        id: credentials
+        shell: pwsh
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)) {
+            Write-Host '::error title=play / ${{ matrix.key }}::Missing GOOGLE_PLAY_SERVICE_ACCOUNT_JSON in the selected environment'
+            exit 1
+          }
+          $path = Join-Path $env:RUNNER_TEMP 'google-play-service-account.json'
+          [IO.File]::WriteAllText($path, $env:GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)
+          "path=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - uses: Novolis-Platform/novolis-workflows/actions/upload-google-play-bundle@main
+        with:
+          package-name: ${{ matrix.application_id }}
+          bundle: ${{ steps.bundle.outputs.bundle_path }}
+          service-account-json-path: ${{ steps.credentials.outputs.path }}
+          track: ${{ inputs.track }}
+          user-fraction: ${{ inputs.user_fraction }}
+          release-name: ${{ inputs.release_tag }}
+
+  result:
+    name: Result
+    needs: [plan, play]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Novolis-Platform/novolis-workflows/actions/workflow-result@main
+        with:
+          title: Google Play
+          jobs: |
+            plan=${{ needs.plan.result }}
+            play=${{ needs.play.result }}

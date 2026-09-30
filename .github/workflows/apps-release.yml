@@ -1,0 +1,232 @@
+name: apps-release
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      windows_matrix: ${{ steps.matrix.outputs.windows_matrix }}
+      linux_matrix: ${{ steps.matrix.outputs.linux_matrix }}
+      android_matrix: ${{ steps.matrix.outputs.android_matrix }}
+      package_version: ${{ steps.ver.outputs.package-version }}
+      assembly_version: ${{ steps.ver.outputs.assembly-version }}
+      file_version: ${{ steps.ver.outputs.file-version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+        with:
+          dotnet-version: 10.0.x
+      - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
+        id: ver
+      - name: Build release matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! dotnet run --project tools/AppsManifest/AppsManifest.csproj --no-launch-profile -- \
+            release-matrix --repo "$GITHUB_WORKSPACE" --app All > /tmp/release-matrix.json; then
+            echo '::error title=Release plan::release-matrix failed'
+            exit 1
+          fi
+          echo "windows_matrix=$(jq -c '[.include[] | select(.channel == "windows-inno")]' /tmp/release-matrix.json)" >> "$GITHUB_OUTPUT"
+          echo "linux_matrix=$(jq -c '[.include[] | select(.channel == "linux-tar")]' /tmp/release-matrix.json)" >> "$GITHUB_OUTPUT"
+          echo "android_matrix=$(jq -c '[.include[] | select(.channel == "android-apk")]' /tmp/release-matrix.json)" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release plan"
+            echo ""
+            echo "Version \`${{ steps.ver.outputs.package-version }}\`"
+            echo ""
+            echo "| Channel | App |"
+            echo "| --- | --- |"
+            jq -r '.include[] | "| \(.channel) | \(.key) |"' /tmp/release-matrix.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  windows-inno:
+    name: windows-inno / ${{ matrix.key }}
+    needs: plan
+    if: needs.plan.outputs.windows_matrix != '[]'
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.windows_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+        with:
+          token: ${{ github.token }}
+      - uses: Novolis-Platform/novolis-workflows/actions/install-inno-setup@main
+      - name: Publish ${{ matrix.key }}
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ needs.plan.outputs.package_version }}
+          ASSEMBLY_VERSION: ${{ needs.plan.outputs.assembly_version }}
+          FILE_VERSION: ${{ needs.plan.outputs.file_version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          "### windows-inno / ${{ matrix.key }}" | Add-Content $env:GITHUB_STEP_SUMMARY
+          $json = dotnet run --project tools/AppsManifest/AppsManifest.csproj --no-launch-profile -- publish `
+            --repo $env:GITHUB_WORKSPACE `
+            --app '${{ matrix.key }}' `
+            --channel windows-inno `
+            --version $env:PACKAGE_VERSION `
+            --assembly-version $env:ASSEMBLY_VERSION `
+            --file-version $env:FILE_VERSION
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host '::error title=windows-inno / ${{ matrix.key }}::Installer publish failed'
+            exit $LASTEXITCODE
+          }
+          $item = $json | ConvertFrom-Json
+          if (-not $item.installerPath) {
+            Write-Host '::error title=windows-inno / ${{ matrix.key }}::No installer path was returned'
+            exit 1
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.key }}
+          path: artifacts/${{ matrix.key }}/installer/*.exe
+          if-no-files-found: error
+
+  linux-tar:
+    name: linux-tar / ${{ matrix.key }}
+    needs: plan
+    if: needs.plan.outputs.linux_matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.linux_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+        with:
+          token: ${{ github.token }}
+      - name: Publish ${{ matrix.key }}
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ needs.plan.outputs.package_version }}
+          ASSEMBLY_VERSION: ${{ needs.plan.outputs.assembly_version }}
+          FILE_VERSION: ${{ needs.plan.outputs.file_version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          "### linux-tar / ${{ matrix.key }}" | Add-Content $env:GITHUB_STEP_SUMMARY
+          $json = dotnet run --project tools/AppsManifest/AppsManifest.csproj --no-launch-profile -- publish `
+            --repo $env:GITHUB_WORKSPACE `
+            --app '${{ matrix.key }}' `
+            --channel linux-tar `
+            --version $env:PACKAGE_VERSION `
+            --assembly-version $env:ASSEMBLY_VERSION `
+            --file-version $env:FILE_VERSION
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host '::error title=linux-tar / ${{ matrix.key }}::Tarball publish failed'
+            exit $LASTEXITCODE
+          }
+          $item = $json | ConvertFrom-Json
+          if (-not $item.tarPath) {
+            Write-Host '::error title=linux-tar / ${{ matrix.key }}::No tarball path was returned'
+            exit 1
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.key }}
+          path: artifacts/${{ matrix.key }}/linux/*.tar.gz
+          if-no-files-found: error
+
+  android-apk:
+    name: android-apk / ${{ matrix.key }}
+    needs: plan
+    if: needs.plan.outputs.android_matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.android_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+        with:
+          token: ${{ github.token }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android workload
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.stack }}" = "maui" ]; then
+            workload=(dotnet workload install maui-android)
+          else
+            workload=(dotnet workload install android)
+          fi
+          if ! "${workload[@]}"; then
+            echo "::error title=android-apk / ${{ matrix.key }}::Android workload install failed"
+            exit 1
+          fi
+      - name: Publish ${{ matrix.key }}
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ needs.plan.outputs.package_version }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets[format('{0}_KEYSTORE_BASE64', matrix.signing_secret_key)] }}
+          ANDROID_KEY_ALIAS: ${{ secrets[format('{0}_KEY_ALIAS', matrix.signing_secret_key)] }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets[format('{0}_KEYSTORE_PASSWORD', matrix.signing_secret_key)] }}
+          ANDROID_KEY_PASSWORD: ${{ secrets[format('{0}_KEY_PASSWORD', matrix.signing_secret_key)] }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          "### android-apk / ${{ matrix.key }}" | Add-Content $env:GITHUB_STEP_SUMMARY
+          . ./scripts/Publish-NovolisApp.ps1
+          $keyStore = Join-Path $env:RUNNER_TEMP 'novolis-android.keystore'
+          $hasKey = $env:ANDROID_KEYSTORE_BASE64 -and $env:ANDROID_KEY_ALIAS -and $env:ANDROID_KEYSTORE_PASSWORD -and $env:ANDROID_KEY_PASSWORD
+          if (-not $hasKey) {
+            Write-Host '::error title=android-apk / ${{ matrix.key }}::Signing secrets for ${{ matrix.signing_secret_key }} are not set'
+            exit 1
+          }
+          [IO.File]::WriteAllBytes($keyStore, [Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64))
+          $item = Publish-NovolisAndroidApk -RepoRoot $env:GITHUB_WORKSPACE -AppKey '${{ matrix.key }}' -PackageVersion $env:PACKAGE_VERSION -RunNumber ([int]$env:RUN_NUMBER) -KeystorePath $keyStore -KeyAlias $env:ANDROID_KEY_ALIAS -KeystorePassword $env:ANDROID_KEYSTORE_PASSWORD -KeyPassword $env:ANDROID_KEY_PASSWORD
+          if (-not $item) {
+            Write-Host '::error title=android-apk / ${{ matrix.key }}::APK publish failed'
+            exit 1
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ matrix.key }}
+          path: artifacts/${{ matrix.key }}/android/*.apk
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish release
+    needs: [plan, windows-inno, linux-tar, android-apk]
+    if: always() && needs.plan.result == 'success' && (needs.windows-inno.result == 'success' || needs.windows-inno.result == 'skipped') && (needs.linux-tar.result == 'success' || needs.linux-tar.result == 'skipped') && (needs.android-apk.result == 'success' || needs.android-apk.result == 'skipped') && (needs.windows-inno.result == 'success' || needs.linux-tar.result == 'success' || needs.android-apk.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/download
+      - uses: Novolis-Platform/novolis-workflows/actions/publish-built-release@main
+        with:
+          tag: v${{ needs.plan.outputs.package_version }}
+          title: v${{ needs.plan.outputs.package_version }}
+          notes: Full release. Every app, every channel declared in build/apps.json.
+          keep: '5'
+
+  result:
+    name: Result
+    needs: [plan, windows-inno, linux-tar, android-apk, publish-release]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Novolis-Platform/novolis-workflows/actions/workflow-result@main
+        with:
+          title: App release
+          jobs: |
+            plan=${{ needs.plan.result }}
+            windows-inno=${{ needs.windows-inno.result }}
+            linux-tar=${{ needs.linux-tar.result }}
+            android-apk=${{ needs.android-apk.result }}
+            publish=${{ needs.publish-release.result }}
