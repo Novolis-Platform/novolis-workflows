@@ -75,6 +75,7 @@ The workflow deliberately does not generate ephemeral signing identities. Releas
 |--------|------|
 | `setup-dotnet` | Install .NET SDK |
 | `authenticate-github-packages` | Add GPR source with `GITHUB_TOKEN` (or PAT) |
+| `prepare-novolis-build` | Clone `novolis-governance`, set up .NET, authenticate GitHub Packages |
 | `checkout-sibling-repos` | Multi-repo checkout layout for CI |
 | `read-version` | `YEAR.MAJOR.MINOR` from JSON + `BUILD` from `github.run_number` |
 | `resolve-release-version` | Validate release tag against `version.json` |
@@ -84,7 +85,8 @@ The workflow deliberately does not generate ephemeral signing identities. Releas
 | `upload-release-packages` | Attach `.nupkg`/`.snupkg` to an existing GitHub Release |
 | `install-inno-setup` | Chocolatey install Inno Setup 6; output `iscc-path` |
 | `write-sha256sums` | Write `SHA256SUMS.txt` for a file list |
-| `ensure-github-release` | Create GitHub Release if missing, then upload assets |
+| `ensure-github-release` | Create a GitHub Release with its assets in one publish, or upload onto a release that already exists |
+| `publish-built-release` | Hash this run's installers, publish one GitHub Release, keep the newest tags |
 | `upload-google-play-bundle` | Upload a signed Android App Bundle to a Google Play track through the Android Publisher API |
 
 `upload-google-play-bundle` is a PowerShell composite action and does not

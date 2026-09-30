@@ -1,0 +1,88 @@
+name: publish-built-release
+description: Hash the installers built in this run and publish them as one GitHub Release, then keep the newest tags.
+inputs:
+  tag:
+    description: Release tag, for example v2026.1.0.45
+    required: true
+  title:
+    description: Release title
+    required: true
+  notes:
+    description: Release notes
+    required: true
+  source-dir:
+    description: Directory of downloaded build artifacts
+    required: false
+    default: artifacts/download
+  staging-dir:
+    description: Directory of files uploaded to the release
+    required: false
+    default: artifacts/release
+  keep:
+    description: How many newest GitHub Releases to keep
+    required: false
+    default: '5'
+runs:
+  using: composite
+  steps:
+    - name: Publish built installers
+      shell: pwsh
+      env:
+        TAG: ${{ inputs.tag }}
+        TITLE: ${{ inputs.title }}
+        NOTES: ${{ inputs.notes }}
+        SOURCE_DIR: ${{ inputs.source-dir }}
+        STAGING_DIR: ${{ inputs.staging-dir }}
+        KEEP: ${{ inputs.keep }}
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        function Resolve-WorkspacePath([string]$path) {
+          if ([System.IO.Path]::IsPathRooted($path)) { return $path }
+          return Join-Path $env:GITHUB_WORKSPACE $path
+        }
+
+        $source = Resolve-WorkspacePath $env:SOURCE_DIR
+        $staging = Resolve-WorkspacePath $env:STAGING_DIR
+        if (-not (Test-Path -LiteralPath $source)) {
+          throw "Release source directory not found: $source"
+        }
+        New-Item -ItemType Directory -Force -Path $staging | Out-Null
+
+        $files = @(Get-ChildItem -LiteralPath $source -Recurse -File |
+          Where-Object { $_.Extension -in '.zip', '.exe', '.apk' -or $_.Name.EndsWith('.tar.gz') })
+        if ($files.Count -eq 0) {
+          throw "No release files under $source"
+        }
+
+        $staged = [System.Collections.Generic.List[string]]::new()
+        foreach ($file in $files) {
+          $dest = Join-Path $staging $file.Name
+          Copy-Item -LiteralPath $file.FullName -Destination $dest -Force
+          $staged.Add($dest)
+        }
+
+        $sums = Join-Path $staging 'SHA256SUMS.txt'
+        $lines = foreach ($path in $staged) {
+          $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          '{0}  {1}' -f $hash, (Split-Path $path -Leaf)
+        }
+        Set-Content -LiteralPath $sums -Value $lines -Encoding utf8NoBOM
+        $staged.Add($sums)
+
+        & gh release create $env:TAG @($staged.ToArray()) --repo $env:REPO --title $env:TITLE --notes $env:NOTES --latest
+        if ($LASTEXITCODE -ne 0) {
+          throw "gh release create failed with exit code $LASTEXITCODE."
+        }
+
+        $keep = [int]$env:KEEP
+        $releases = gh release list --repo $env:REPO --limit 100 --json tagName,createdAt | ConvertFrom-Json
+        $drop = @($releases | Sort-Object { [datetime]$_.createdAt } -Descending | Select-Object -Skip $keep)
+        foreach ($release in $drop) {
+          Write-Host "Deleting $($release.tagName)"
+          gh release delete $release.tagName --repo $env:REPO --yes --cleanup-tag
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to delete release $($release.tagName) (exit $LASTEXITCODE)."
+          }
+        }

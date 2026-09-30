@@ -10,12 +10,10 @@ on:
         required: false
         type: string
         default: build/version.json
-    secrets:
-      NUGET_API_KEY:
-        required: true
 permissions:
   contents: read
   packages: write
+  id-token: write
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -32,7 +30,6 @@ jobs:
         with:
           version-file: ${{ inputs.version-file }}
           build-number: ${{ github.run_number }}
-          git-sha: ${{ github.sha }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
         with:
@@ -47,8 +44,15 @@ jobs:
           file-version: ${{ steps.ver.outputs['file-version'] }}
           informational-version: ${{ steps.ver.outputs['package-version'] }}
 
+      - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
+
+      - uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: frankhaugen
+
       - uses: Novolis-Platform/novolis-workflows/actions/publish-nuget-org@main
         with:
-          api_key: ${{ secrets.NUGET_API_KEY }}
+          api_key: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/upload-release-packages@main

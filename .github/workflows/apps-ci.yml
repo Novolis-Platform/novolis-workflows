@@ -1,0 +1,214 @@
+name: apps-ci
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: pull_request, merge, or dispatch
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      linux_matrix: ${{ steps.matrix.outputs.linux_matrix }}
+      android_matrix: ${{ steps.matrix.outputs.android_matrix }}
+      windows_matrix: ${{ steps.matrix.outputs.windows_matrix }}
+      skip_build: ${{ steps.matrix.outputs.skip_build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+        with:
+          dotnet-version: 10.0.x
+      - name: Validate apps manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          pwsh -NoProfile -File scripts/verify-apps-manifest.ps1 -RepoRoot "$env:GITHUB_WORKSPACE"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host '::error title=Apps manifest::verify-apps-manifest.ps1 failed'
+            exit $LASTEXITCODE
+          }
+      - name: Test AppsManifest planner
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! dotnet test tests/AppsManifest.Unit/AppsManifest.Unit.csproj -c Release; then
+            echo '::error title=AppsManifest tests::AppsManifest.Unit failed'
+            exit 1
+          fi
+      - name: Resolve changed-app matrix
+        id: matrix
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          plan() {
+            dotnet run --project tools/AppsManifest/AppsManifest.csproj --no-launch-profile -- "$@" > /tmp/matrix.json
+          }
+          if [ "$MODE" = "dispatch" ]; then
+            plan ci-matrix --repo "$GITHUB_WORKSPACE" --all --coverage full
+          elif [ "$MODE" = "pull_request" ]; then
+            git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" > /tmp/changed-files.txt || true
+            plan ci-matrix --repo "$GITHUB_WORKSPACE" --changed-files /tmp/changed-files.txt --coverage fast
+          else
+            before="${{ github.event.before }}"
+            if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+              plan ci-matrix --repo "$GITHUB_WORKSPACE" --all
+            else
+              git diff --name-only "$before...${{ github.sha }}" > /tmp/changed-files.txt || true
+              plan ci-matrix --repo "$GITHUB_WORKSPACE" --changed-files /tmp/changed-files.txt --coverage fast
+            fi
+          fi
+          echo "linux_matrix=$(jq -c '.linux' /tmp/matrix.json)" >> "$GITHUB_OUTPUT"
+          echo "android_matrix=$(jq -c '.android' /tmp/matrix.json)" >> "$GITHUB_OUTPUT"
+          echo "windows_matrix=$(jq -c '.windows' /tmp/matrix.json)" >> "$GITHUB_OUTPUT"
+          echo "skip_build=$(jq -r '.skip_build' /tmp/matrix.json)" >> "$GITHUB_OUTPUT"
+          {
+            echo "## App CI plan"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            jq -r '"| Coverage | \(.summary.coverage) |",
+              "| Apps | \(.summary.selected_apps) |",
+              "| Linux | \(.summary.linux_rows) |",
+              "| Android | \(.summary.android_rows) |",
+              "| Windows | \(.summary.windows_rows) |"' /tmp/matrix.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  linux:
+    name: linux / ${{ matrix.key }}
+    needs: detect
+    if: needs.detect.outputs.skip_build != 'true' && needs.detect.outputs.linux_matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect.outputs.linux_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+        with:
+          token: ${{ github.token }}
+      - name: Build ${{ matrix.key }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "### linux / ${{ matrix.key }}"
+            echo ""
+            echo "\`${{ matrix.solution }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cfg=()
+          if [ -f nuget.config ]; then cfg=(--configfile nuget.config); fi
+          if ! dotnet restore "${{ matrix.solution }}" "${cfg[@]}"; then
+            echo "::error title=linux / ${{ matrix.key }}::Restore failed for ${{ matrix.solution }}"
+            exit 1
+          fi
+          if ! dotnet build "${{ matrix.solution }}" --no-restore -c Release "${cfg[@]}"; then
+            echo "::error title=linux / ${{ matrix.key }}::Build failed for ${{ matrix.solution }}"
+            exit 1
+          fi
+      - name: Test ${{ matrix.key }}
+        if: matrix.run_tests == true || matrix.run_tests == 'True'
+        shell: bash
+        run: |
+          set -euo pipefail
+          IFS=';' read -ra projects <<< "${{ matrix.test_projects }}"
+          for project in "${projects[@]}"; do
+            [ -n "$project" ] || continue
+            if ! dotnet test "$project" --no-build -c Release; then
+              echo "::error title=linux / ${{ matrix.key }}::Tests failed for $project"
+              exit 1
+            fi
+          done
+
+  android:
+    name: android / ${{ matrix.key }}
+    needs: detect
+    if: needs.detect.outputs.skip_build != 'true' && needs.detect.outputs.android_matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect.outputs.android_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+        with:
+          token: ${{ github.token }}
+      - name: Build ${{ matrix.key }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "### android / ${{ matrix.key }}"
+            echo ""
+            echo "\`${{ matrix.project }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ matrix.is_maui }}" = "True" ] || [ "${{ matrix.is_maui }}" = "true" ]; then
+            dotnet workload install maui-android
+            build=(dotnet build "${{ matrix.project }}" -f net10.0-android -c Release -p:NovolisMauiTargetFrameworks=net10.0-android)
+          else
+            dotnet workload install android
+            build=(dotnet build "${{ matrix.project }}" -c Release)
+          fi
+          if ! "${build[@]}"; then
+            echo "::error title=android / ${{ matrix.key }}::Build failed for ${{ matrix.project }}"
+            exit 1
+          fi
+
+  windows:
+    name: windows / ${{ matrix.key }}
+    needs: detect
+    if: needs.detect.outputs.skip_build != 'true' && needs.detect.outputs.windows_matrix != '[]'
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect.outputs.windows_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+        with:
+          token: ${{ github.token }}
+      - name: Install MAUI Windows workload
+        if: matrix.install_windows_workload == true || matrix.install_windows_workload == 'True'
+        shell: pwsh
+        run: dotnet workload install maui-windows
+      - name: Build ${{ matrix.key }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @(
+            "### windows / ${{ matrix.key }}",
+            "",
+            '`${{ matrix.project }}`'
+          ) | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+          dotnet build '${{ matrix.project }}' -c Release
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host '::error title=windows / ${{ matrix.key }}::Build failed for ${{ matrix.project }}'
+            exit $LASTEXITCODE
+          }
+
+  result:
+    name: Result
+    needs: [detect, linux, android, windows]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Novolis-Platform/novolis-workflows/actions/workflow-result@main
+        with:
+          title: App CI
+          jobs: |
+            detect=${{ needs.detect.result }}
+            linux=${{ needs.linux.result }}
+            android=${{ needs.android.result }}
+            windows=${{ needs.windows.result }}

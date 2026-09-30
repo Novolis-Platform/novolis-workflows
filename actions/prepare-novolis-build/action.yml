@@ -1,0 +1,38 @@
+name: prepare-novolis-build
+description: Clone novolis-governance beside the workspace, set up .NET, and authenticate GitHub Packages.
+inputs:
+  dotnet-version:
+    description: .NET SDK version passed to setup-dotnet
+    required: false
+    default: 10.0.x
+  token:
+    description: GitHub Packages token. Empty uses the job token.
+    required: false
+    default: ''
+  governance-repo:
+    description: Sibling repo that holds the shared MSBuild targets
+    required: false
+    default: novolis-governance
+runs:
+  using: composite
+  steps:
+    - name: Checkout governance build targets
+      shell: bash
+      env:
+        GOV_REPO: ${{ inputs.governance-repo }}
+        OWNER: ${{ github.repository_owner }}
+      run: |
+        set -euo pipefail
+        gov="../${GOV_REPO}"
+        if [ -f "$gov/build/Novolis.Version.targets" ]; then
+          echo "Sibling present: $GOV_REPO"
+          exit 0
+        fi
+        git clone --depth 1 --branch main \
+          "https://github.com/${OWNER}/${GOV_REPO}.git" "$gov"
+    - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+    - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      with:
+        token: ${{ inputs.token }}

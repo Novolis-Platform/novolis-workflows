@@ -10,12 +10,20 @@ inputs:
   assets:
     description: Newline-separated absolute or workspace-relative file paths to upload
     required: true
+  notes:
+    description: Release notes used when creating. Empty keeps generate-notes behavior.
+    required: false
+    default: ''
   generate-notes:
-    description: Pass --generate-notes when creating the release
+    description: Pass --generate-notes when creating the release and notes is empty
     required: false
     default: 'true'
+  latest:
+    description: Pass --latest when creating the release
+    required: false
+    default: 'false'
   clobber:
-    description: Pass --clobber on upload
+    description: Pass --clobber on upload when the release already exists
     required: false
     default: 'true'
 runs:
@@ -27,7 +35,9 @@ runs:
         TAG: ${{ inputs.tag }}
         TITLE: ${{ inputs.title }}
         ASSETS: ${{ inputs.assets }}
+        NOTES: ${{ inputs.notes }}
         GENERATE_NOTES: ${{ inputs.generate-notes }}
+        LATEST: ${{ inputs.latest }}
         CLOBBER: ${{ inputs.clobber }}
         GH_TOKEN: ${{ github.token }}
       run: |
@@ -54,14 +64,21 @@ runs:
 
         gh release view $env:TAG 2>$null
         if ($LASTEXITCODE -ne 0) {
-          $createArgs = @('release', 'create', $env:TAG, '--title', $env:TITLE)
-          if ($env:GENERATE_NOTES -eq 'true') {
+          $createArgs = @('release', 'create', $env:TAG, '--title', $env:TITLE) + $paths.ToArray()
+          if (-not [string]::IsNullOrWhiteSpace($env:NOTES)) {
+            $createArgs += @('--notes', $env:NOTES)
+          }
+          elseif ($env:GENERATE_NOTES -eq 'true') {
             $createArgs += '--generate-notes'
+          }
+          if ($env:LATEST -eq 'true') {
+            $createArgs += '--latest'
           }
           & gh @createArgs
           if ($LASTEXITCODE -ne 0) {
             throw "gh release create failed with exit code $LASTEXITCODE."
           }
+          return
         }
 
         $uploadArgs = @('release', 'upload', $env:TAG) + $paths.ToArray()

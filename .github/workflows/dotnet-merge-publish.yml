@@ -17,6 +17,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 # Supersede rapid re-pushes to the same repo (cross-repo herds still run in parallel).
 concurrency:
@@ -132,3 +133,14 @@ jobs:
 
       - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
         if: needs.detect.outputs.run_publish == 'true'
+
+      - uses: NuGet/login@v1
+        id: nuget-login
+        if: needs.detect.outputs.run_publish == 'true'
+        with:
+          user: frankhaugen
+
+      - uses: Novolis-Platform/novolis-workflows/actions/publish-nuget-org@main
+        if: needs.detect.outputs.run_publish == 'true'
+        with:
+          api_key: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
