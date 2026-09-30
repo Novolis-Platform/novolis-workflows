@@ -51,8 +51,8 @@ Example: `2026.1.1.351` where `351` = `github.run_number`.
 | Workflow | Repo file | Purpose |
 |----------|-----------|---------|
 | `dotnet-pull-request.yml` | `pull-request.yml` | Restore, build, test |
-| `dotnet-merge-publish.yml` | `merge.yml` | Build, pack, push to GitHub Packages |
-| `dotnet-release-publish.yml` | `release.yml` | Pack, push to nuget.org |
+| `dotnet-merge-publish.yml` | `merge.yml` | Build, pack, push to GitHub Packages and nuget.org |
+| `dotnet-release-publish.yml` | `release.yml` | Pack, push to GitHub Packages, attach packages to the GitHub Release. Does not push nuget.org |
 | `maui-pull-request.yml` | application PR workflow | Build .NET 10 MAUI Android + Windows and optional core tests |
 | `maui-release.yml` | application release workflow | Produce signed Android APK + Windows MSIX, SHA256 sums, and attach to a GitHub release |
 
@@ -69,6 +69,18 @@ Callers of `maui-release.yml` provide these through `secrets: inherit` or an exp
 
 The workflow deliberately does not generate ephemeral signing identities. Release artifacts keep stable application identities across versions.
 
+## App workflows
+
+`novolis-apps` calls these. The caller files only choose the trigger.
+
+| Workflow | Caller |
+|----------|--------|
+| `apps-ci.yml` | Pull request and merge. `mode` is `pull_request`, `merge`, or `dispatch`. |
+| `apps-release.yml` | Manual full release. No Play Store and no nuget.org. |
+| `apps-play.yml` | Manual Play delivery from an existing tag. |
+
+A failed check is named `channel / app`. The Result job lists every job and adds an annotation for each failure.
+
 ## Composite actions
 
 | Action | Role |
@@ -76,6 +88,7 @@ The workflow deliberately does not generate ephemeral signing identities. Releas
 | `setup-dotnet` | Install .NET SDK |
 | `authenticate-github-packages` | Add GPR source with `GITHUB_TOKEN` (or PAT) |
 | `prepare-novolis-build` | Clone `novolis-governance`, set up .NET, authenticate GitHub Packages |
+| `workflow-result` | Summary table of job results, with an annotation for each failure |
 | `checkout-sibling-repos` | Multi-repo checkout layout for CI |
 | `read-version` | `YEAR.MAJOR.MINOR` from JSON + `BUILD` from `github.run_number` |
 | `resolve-release-version` | Validate release tag against `version.json` |

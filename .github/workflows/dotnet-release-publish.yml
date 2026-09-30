@@ -13,7 +13,6 @@ on:
 permissions:
   contents: read
   packages: write
-  id-token: write
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -45,14 +44,5 @@ jobs:
           informational-version: ${{ steps.ver.outputs['package-version'] }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
-
-      - uses: NuGet/login@v1
-        id: nuget-login
-        with:
-          user: frankhaugen
-
-      - uses: Novolis-Platform/novolis-workflows/actions/publish-nuget-org@main
-        with:
-          api_key: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
 
       - uses: Novolis-Platform/novolis-workflows/actions/upload-release-packages@main
