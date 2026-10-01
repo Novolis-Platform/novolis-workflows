@@ -15,7 +15,7 @@ on:
         description: True when packages were packed for the caller to push to nuget.org
         value: ${{ jobs.release.outputs.packed }}
 permissions:
-  contents: read
+  contents: write
   packages: write
 jobs:
   release:
