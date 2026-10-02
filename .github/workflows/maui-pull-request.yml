@@ -49,10 +49,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      - uses: $/actions/setup-dotnet
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
-      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - uses: $/actions/authenticate-github-packages
       - run: dotnet test "${{ inputs.test-project }}" -c Release
 
   ui-test-compile:
@@ -60,10 +60,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      - uses: $/actions/setup-dotnet
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
-      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - uses: $/actions/authenticate-github-packages
       - name: Compile UI smoke tests
         run: dotnet build "${{ inputs.ui-test-project }}" -c Release
 
@@ -71,10 +71,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      - uses: $/actions/setup-dotnet
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
-      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - uses: $/actions/authenticate-github-packages
       - name: Install Android workload
         run: dotnet workload install maui-android
       - name: Build Android
@@ -89,10 +89,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      - uses: $/actions/setup-dotnet
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
-      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - uses: $/actions/authenticate-github-packages
       - name: Install Windows workload
         shell: pwsh
         run: dotnet workload install maui-windows

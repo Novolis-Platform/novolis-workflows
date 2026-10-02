@@ -25,33 +25,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: Novolis-Platform/novolis-workflows/actions/resolve-release-version@main
+      - uses: $/actions/resolve-release-version
         id: tag
         with:
           version-file: ${{ inputs.version-file }}
 
-      - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
+      - uses: $/actions/read-version
         id: ver
         with:
           version-file: ${{ inputs.version-file }}
           build-number: ${{ github.run_number }}
 
-      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
+      - uses: $/actions/dotnet-build
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           packages_token: ${{ github.token }}
           run_tests: false
 
-      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
+      - uses: $/actions/dotnet-pack-versioned
         with:
           package-version: ${{ steps.ver.outputs['package-version'] }}
           assembly-version: ${{ steps.ver.outputs['assembly-version'] }}
           file-version: ${{ steps.ver.outputs['file-version'] }}
           informational-version: ${{ steps.ver.outputs['package-version'] }}
 
-      - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
+      - uses: $/actions/publish-github-packages
 
-      - uses: Novolis-Platform/novolis-workflows/actions/upload-release-packages@main
+      - uses: $/actions/upload-release-packages
 
       - id: packed
         shell: bash

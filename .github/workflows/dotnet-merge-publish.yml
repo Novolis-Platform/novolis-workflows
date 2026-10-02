@@ -113,20 +113,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
+      - uses: $/actions/read-version
         id: ver
         with:
           version-file: ${{ inputs.version-file }}
           build-number: ${{ github.run_number }}
 
-      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
+      - uses: $/actions/dotnet-build
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           packages_token: ${{ github.token }}
           # Fail before pack/publish: tests + doc-audit inside this action.
           run_tests: true
 
-      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
+      - uses: $/actions/dotnet-pack-versioned
         if: needs.detect.outputs.run_publish == 'true'
         with:
           package-version: ${{ steps.ver.outputs['package-version'] }}
@@ -134,7 +134,7 @@ jobs:
           file-version: ${{ steps.ver.outputs['file-version'] }}
           informational-version: ${{ steps.ver.outputs['package-version'] }}
 
-      - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
+      - uses: $/actions/publish-github-packages
         if: needs.detect.outputs.run_publish == 'true'
 
       # nuget.org login must run in the caller workflow. NuGet matches job_workflow_ref

@@ -8,10 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
-      - uses: Novolis-Platform/novolis-workflows/actions/restore@main
-      - uses: Novolis-Platform/novolis-workflows/actions/build@main
-      - uses: Novolis-Platform/novolis-workflows/actions/pack@main
+      - uses: $/actions/setup-dotnet
+      - uses: $/actions/restore
+      - uses: $/actions/build
+      - uses: $/actions/pack
       - uses: actions/upload-artifact@v4
         with:
           name: packages

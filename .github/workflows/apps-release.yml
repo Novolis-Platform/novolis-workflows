@@ -18,10 +18,10 @@ jobs:
       file_version: ${{ steps.ver.outputs.file-version }}
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      - uses: $/actions/setup-dotnet
         with:
           dotnet-version: 10.0.x
-      - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
+      - uses: $/actions/read-version
         id: ver
       - name: Build release matrix
         id: matrix
@@ -57,10 +57,10 @@ jobs:
         include: ${{ fromJson(needs.plan.outputs.windows_matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+      - uses: $/actions/prepare-novolis-build
         with:
           token: ${{ github.token }}
-      - uses: Novolis-Platform/novolis-workflows/actions/install-inno-setup@main
+      - uses: $/actions/install-inno-setup
       - name: Publish ${{ matrix.key }}
         shell: pwsh
         env:
@@ -103,7 +103,7 @@ jobs:
         include: ${{ fromJson(needs.plan.outputs.linux_matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+      - uses: $/actions/prepare-novolis-build
         with:
           token: ${{ github.token }}
       - name: Publish ${{ matrix.key }}
@@ -148,7 +148,7 @@ jobs:
         include: ${{ fromJson(needs.plan.outputs.android_matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+      - uses: $/actions/prepare-novolis-build
         with:
           token: ${{ github.token }}
       - uses: actions/setup-java@v4
@@ -208,7 +208,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts/download
-      - uses: Novolis-Platform/novolis-workflows/actions/publish-built-release@main
+      - uses: $/actions/publish-built-release
         with:
           tag: v${{ needs.plan.outputs.package_version }}
           title: v${{ needs.plan.outputs.package_version }}
@@ -221,7 +221,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: Novolis-Platform/novolis-workflows/actions/workflow-result@main
+      - uses: $/actions/workflow-result
         with:
           title: App release
           jobs: |

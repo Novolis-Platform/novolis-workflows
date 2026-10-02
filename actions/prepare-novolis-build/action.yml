@@ -30,9 +30,9 @@ runs:
         fi
         git clone --depth 1 --branch main \
           "https://github.com/${OWNER}/${GOV_REPO}.git" "$gov"
-    - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+    - uses: $/actions/setup-dotnet
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
-    - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+    - uses: $/actions/authenticate-github-packages
       with:
         token: ${{ inputs.token }}

@@ -33,7 +33,7 @@ jobs:
     steps:
       # LFS objects are pulled only when .gitattributes uses filter=lfs (dotnet-build).
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
+      - uses: $/actions/dotnet-build
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           solution: ${{ inputs.solution }}

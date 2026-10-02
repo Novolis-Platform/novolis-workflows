@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      - uses: $/actions/setup-dotnet
         with:
           dotnet-version: 10.0.x
       - name: Validate apps manifest
@@ -94,7 +94,7 @@ jobs:
         include: ${{ fromJSON(needs.detect.outputs.linux_matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+      - uses: $/actions/prepare-novolis-build
         with:
           token: ${{ github.token }}
       - name: Build ${{ matrix.key }}
@@ -141,7 +141,7 @@ jobs:
         include: ${{ fromJSON(needs.detect.outputs.android_matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+      - uses: $/actions/prepare-novolis-build
         with:
           token: ${{ github.token }}
       - name: Build ${{ matrix.key }}
@@ -176,7 +176,7 @@ jobs:
         include: ${{ fromJSON(needs.detect.outputs.windows_matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/prepare-novolis-build@main
+      - uses: $/actions/prepare-novolis-build
         with:
           token: ${{ github.token }}
       - name: Install MAUI Windows workload
@@ -204,7 +204,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: Novolis-Platform/novolis-workflows/actions/workflow-result@main
+      - uses: $/actions/workflow-result
         with:
           title: App CI
           jobs: |

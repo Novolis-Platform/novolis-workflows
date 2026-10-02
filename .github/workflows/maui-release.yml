@@ -56,10 +56,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      - uses: $/actions/setup-dotnet
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
-      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - uses: $/actions/authenticate-github-packages
       - run: dotnet workload install maui-android
       - name: Publish installable APK
         shell: bash
@@ -120,10 +120,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
+      - uses: $/actions/setup-dotnet
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
-      - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
+      - uses: $/actions/authenticate-github-packages
       - name: Install Windows workload
         shell: pwsh
         run: dotnet workload install maui-windows
@@ -190,7 +190,7 @@ jobs:
           echo "list<<EOF" >> "$GITHUB_OUTPUT"
           echo "$list" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
-      - uses: Novolis-Platform/novolis-workflows/actions/ensure-github-release@main
+      - uses: $/actions/ensure-github-release
         with:
           tag: ${{ inputs.release-tag != '' && inputs.release-tag || github.ref_name }}
           title: ${{ inputs.release-tag != '' && inputs.release-tag || github.ref_name }}

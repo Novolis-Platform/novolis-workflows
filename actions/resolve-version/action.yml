@@ -7,7 +7,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
+    - uses: $/actions/read-version
       id: read
       with:
         build-number: ${{ github.run_number }}
