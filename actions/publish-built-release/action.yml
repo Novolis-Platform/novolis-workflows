@@ -22,6 +22,9 @@ inputs:
     description: How many newest GitHub Releases to keep
     required: false
     default: '5'
+  metadata-json:
+    description: Release matrix JSON used to build the signed update catalog
+    required: true
 runs:
   using: composite
   steps:
@@ -34,6 +37,7 @@ runs:
         SOURCE_DIR: ${{ inputs.source-dir }}
         STAGING_DIR: ${{ inputs.staging-dir }}
         KEEP: ${{ inputs.keep }}
+        UPDATE_METADATA_JSON: ${{ inputs.metadata-json }}
         GH_TOKEN: ${{ github.token }}
         REPO: ${{ github.repository }}
       run: |
@@ -49,6 +53,8 @@ runs:
           throw "Release source directory not found: $source"
         }
         New-Item -ItemType Directory -Force -Path $staging | Out-Null
+        Get-ChildItem -LiteralPath $staging -File -ErrorAction SilentlyContinue |
+          Remove-Item -Force
 
         $files = @(Get-ChildItem -LiteralPath $source -Recurse -File |
           Where-Object { $_.Extension -in '.zip', '.exe', '.apk' -or $_.Name.EndsWith('.tar.gz') })
@@ -57,11 +63,123 @@ runs:
         }
 
         $staged = [System.Collections.Generic.List[string]]::new()
+        $names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         foreach ($file in $files) {
+          if (-not $names.Add($file.Name)) {
+            throw "Duplicate release asset basename: $($file.Name)"
+          }
           $dest = Join-Path $staging $file.Name
           Copy-Item -LiteralPath $file.FullName -Destination $dest -Force
           $staged.Add($dest)
         }
+
+        $metadata = $env:UPDATE_METADATA_JSON | ConvertFrom-Json
+        $rows = @($metadata.include)
+        if ($rows.Count -eq 0) {
+          throw 'Update metadata contains no release rows.'
+        }
+
+        $releaseUri = "https://github.com/$env:REPO/releases/download/$env:TAG"
+        $repositoryUri = "https://github.com/$env:REPO"
+        $releaseTime = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
+        $updates = [System.Collections.Generic.List[object]]::new()
+        $groups = $rows | Group-Object update_app_id, update_channel
+        foreach ($group in $groups) {
+          $first = $group.Group[0]
+          $appId = [string]$first.update_app_id
+          $channel = [string]$first.update_channel
+          $distribution = [string]$first.update_distribution
+          if ($distribution -ne 'direct-github') {
+            throw "Store-managed app cannot be published in the direct updater catalog: $appId"
+          }
+
+          $artifacts = [System.Collections.Generic.List[object]]::new()
+          $declaredKinds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+          foreach ($row in $group.Group) {
+            foreach ($kind in @($row.declared_update_artifacts)) {
+              [void]$declaredKinds.Add([string]$kind)
+            }
+          }
+          foreach ($kind in $declaredKinds) {
+            $extension = switch ($kind.ToLowerInvariant()) {
+              'windowsinstaller' { '.exe' }
+              'windowsportable' { '.zip' }
+              'linuxtargz' { '.tar.gz' }
+              'androidapk' { '.apk' }
+              default { throw "Unsupported update artifact kind: $kind" }
+            }
+            $prefixes = @($group.Group | ForEach-Object {
+              if ($_.artifact_prefix) { [string]$_.artifact_prefix } else { [string]$_.key }
+            })
+            $matches = @($staged | Where-Object {
+              $name = Split-Path -Leaf $_
+              $name.EndsWith($extension, [StringComparison]::OrdinalIgnoreCase) -and
+                ($prefixes | Where-Object {
+                  $name.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) -or
+                  $name.Contains($_, [StringComparison]::OrdinalIgnoreCase)
+                }).Count -gt 0
+            })
+            if ($matches.Count -ne 1) {
+              throw "Expected one $kind asset for $appId, found $($matches.Count)."
+            }
+            $path = $matches[0]
+            $name = Split-Path -Leaf $path
+            $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            $length = (Get-Item -LiteralPath $path).Length
+            $target = switch ($kind.ToLowerInvariant()) {
+              'windowsinstaller' { [ordered]@{ platform = 'windows'; runtimeIdentifier = 'win-x64'; architecture = 'x64' } }
+              'windowsportable' { [ordered]@{ platform = 'windows'; runtimeIdentifier = 'win-x64'; architecture = 'x64' } }
+              'linuxtargz' { [ordered]@{ platform = 'linux'; runtimeIdentifier = 'linux-x64'; architecture = 'x64' } }
+              'androidapk' { [ordered]@{ platform = 'android' } }
+            }
+            $contentType = switch ($kind.ToLowerInvariant()) {
+              'windowsinstaller' { 'application/vnd.microsoft.portable-executable' }
+              'windowsportable' { 'application/zip' }
+              'linuxtargz' { 'application/gzip' }
+              'androidapk' { 'application/vnd.android.package-archive' }
+            }
+            $artifacts.Add([ordered]@{
+              name = $name
+              kind = $kind
+              target = $target
+              downloadUri = "$releaseUri/$([Uri]::EscapeDataString($name))"
+              length = $length
+              sha256 = $hash
+              contentType = $contentType
+            })
+          }
+
+          $updates.Add([ordered]@{
+            schemaVersion = 1
+            appId = $appId
+            displayName = [string]$first.display_name
+            distributionMode = 'directGithub'
+            channel = $channel
+            version = ($env:TAG -replace '^v', '')
+            publishedAt = $releaseTime
+            provenance = [ordered]@{
+              appId = $appId
+              repository = if ($first.update_repository) { [string]$first.update_repository } else { $repositoryUri }
+              tag = $env:TAG
+              releaseUri = "https://github.com/$env:REPO/releases/tag/$env:TAG"
+              commit = $env:GITHUB_SHA
+            }
+            artifacts = @($artifacts | Sort-Object name)
+          })
+        }
+
+        $catalog = [ordered]@{
+          schemaVersion = 1
+          generatedAt = $releaseTime
+          updates = @($updates | Sort-Object appId)
+        }
+        $manifestPath = Join-Path $staging 'Novolis.Update.json'
+        $json = $catalog | ConvertTo-Json -Depth 20
+        [System.IO.File]::WriteAllText(
+          $manifestPath,
+          $json + [Environment]::NewLine,
+          [System.Text.UTF8Encoding]::new($false))
+        $staged.Add($manifestPath)
 
         $sums = Join-Path $staging 'SHA256SUMS.txt'
         $lines = foreach ($path in $staged) {

@@ -13,6 +13,7 @@ jobs:
       windows_matrix: ${{ steps.matrix.outputs.windows_matrix }}
       linux_matrix: ${{ steps.matrix.outputs.linux_matrix }}
       android_matrix: ${{ steps.matrix.outputs.android_matrix }}
+      release_matrix: ${{ steps.matrix.outputs.release_matrix }}
       package_version: ${{ steps.ver.outputs.package-version }}
       assembly_version: ${{ steps.ver.outputs.assembly-version }}
       file_version: ${{ steps.ver.outputs.file-version }}
@@ -36,6 +37,7 @@ jobs:
           echo "windows_matrix=$(jq -c '[.include[] | select(.channel == "windows-inno")]' /tmp/release-matrix.json)" >> "$GITHUB_OUTPUT"
           echo "linux_matrix=$(jq -c '[.include[] | select(.channel == "linux-tar")]' /tmp/release-matrix.json)" >> "$GITHUB_OUTPUT"
           echo "android_matrix=$(jq -c '[.include[] | select(.channel == "android-apk")]' /tmp/release-matrix.json)" >> "$GITHUB_OUTPUT"
+          echo "release_matrix=$(jq -c . /tmp/release-matrix.json)" >> "$GITHUB_OUTPUT"
           {
             echo "## Release plan"
             echo ""
@@ -89,7 +91,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.key }}
-          path: artifacts/${{ matrix.key }}/installer/*.exe
+          path: |
+            artifacts/${{ matrix.key }}/installer/*.exe
+            artifacts/${{ matrix.key }}/*.zip
           if-no-files-found: error
 
   linux-tar:
@@ -205,6 +209,7 @@ jobs:
     if: always() && needs.plan.result == 'success' && (needs.windows-inno.result == 'success' || needs.windows-inno.result == 'skipped') && (needs.linux-tar.result == 'success' || needs.linux-tar.result == 'skipped') && (needs.android-apk.result == 'success' || needs.android-apk.result == 'skipped') && (needs.windows-inno.result == 'success' || needs.linux-tar.result == 'success' || needs.android-apk.result == 'success')
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts/download
@@ -214,6 +219,7 @@ jobs:
           title: v${{ needs.plan.outputs.package_version }}
           notes: Full release. Every app, every channel declared in build/apps.json.
           keep: '5'
+          metadata-json: ${{ needs.plan.outputs.release_matrix }}
 
   result:
     name: Result
