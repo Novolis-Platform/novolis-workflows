@@ -89,6 +89,7 @@ A failed check is named `channel / app`. The Result job lists every job and adds
 | `authenticate-github-packages` | Add GPR source with `GITHUB_TOKEN` (or PAT) |
 | `prepare-novolis-build` | Clone `novolis-governance`, set up .NET, authenticate GitHub Packages |
 | `workflow-result` | Summary table of job results, with an annotation for each failure |
+| `dispatch-org-landing` | Ask `Novolis-Platform/.github` to refresh the docs-home failure list |
 | `checkout-sibling-repos` | Multi-repo checkout layout for CI |
 | `read-version` | `YEAR.MAJOR.MINOR` from JSON + `BUILD` from `github.run_number` |
 | `resolve-release-version` | Validate release tag against `version.json` |

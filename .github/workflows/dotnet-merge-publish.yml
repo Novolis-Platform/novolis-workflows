@@ -145,3 +145,12 @@ jobs:
           name: nuget-packages
           path: artifacts/packages/*.nupkg
           if-no-files-found: error
+
+  landing:
+    needs: [detect, ci]
+    if: always() && needs.detect.outputs.run_ci == 'true' && needs.ci.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: $/actions/dispatch-org-landing
+        with:
+          token: ${{ secrets.NOVOLIS_LANDING_TOKEN != '' && secrets.NOVOLIS_LANDING_TOKEN || secrets.NOVOLIS_GPR_TOKEN }}

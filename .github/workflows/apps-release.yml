@@ -230,3 +230,7 @@ jobs:
             linux-tar=${{ needs.linux-tar.result }}
             android-apk=${{ needs.android-apk.result }}
             publish=${{ needs.publish-release.result }}
+      - uses: $/actions/dispatch-org-landing
+        if: always()
+        with:
+          token: ${{ secrets.NOVOLIS_LANDING_TOKEN != '' && secrets.NOVOLIS_LANDING_TOKEN || secrets.NOVOLIS_GPR_TOKEN }}
