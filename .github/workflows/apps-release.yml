@@ -1,6 +1,11 @@
 name: apps-release
 on:
   workflow_call:
+    inputs:
+      app:
+        description: App choice, key, or All
+        type: string
+        default: All
 
 permissions:
   contents: write
@@ -30,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           if ! dotnet run --project tools/AppsManifest/AppsManifest.csproj --no-launch-profile -- \
-            release-matrix --repo "$GITHUB_WORKSPACE" --app All > /tmp/release-matrix.json; then
+            release-matrix --repo "$GITHUB_WORKSPACE" --app '${{ inputs.app }}' > /tmp/release-matrix.json; then
             echo '::error title=Release plan::release-matrix failed'
             exit 1
           fi
@@ -217,7 +222,7 @@ jobs:
         with:
           tag: v${{ needs.plan.outputs.package_version }}
           title: v${{ needs.plan.outputs.package_version }}
-          notes: Full release. Every app, every channel declared in build/apps.json.
+          notes: Release for ${{ inputs.app }}. Channels declared in build/apps.json.
           keep: '5'
           metadata-json: ${{ needs.plan.outputs.release_matrix }}
 
