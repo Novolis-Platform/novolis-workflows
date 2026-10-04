@@ -19,6 +19,11 @@ on:
         required: false
         type: boolean
         default: false
+      test_projects:
+        description: Optional semicolon-separated test projects. When set, only these are tested.
+        required: false
+        type: string
+        default: ''
 permissions:
   contents: read
   packages: read
@@ -38,5 +43,6 @@ jobs:
           dotnet-version: ${{ inputs.dotnet-version }}
           solution: ${{ inputs.solution }}
           run_tests: ${{ inputs.run_tests }}
+          test_projects: ${{ inputs.test_projects }}
           skip_dogfood_prepare: ${{ inputs.skip_dogfood_prepare }}
           packages_token: ${{ github.token }}
