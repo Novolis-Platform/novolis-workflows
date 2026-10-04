@@ -202,19 +202,19 @@ runs:
           }
           $artifactNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
           foreach ($artifact in @($update.artifacts)) {
-            if ([string]::IsNullOrWhiteSpace($artifact.name)
-                -or $artifact.name.Contains('/')
-                -or $artifact.name.Contains('\')
-                -or $artifact.name.Contains('..')) {
-              throw "Generated update contains an unsafe artifact name: $($artifact.name)"
+            $artifactName = [string]$artifact.name
+            $unsafeName = [string]::IsNullOrWhiteSpace($artifactName) -or $artifactName.IndexOf([char]47) -ge 0 -or $artifactName.IndexOf([char]92) -ge 0 -or $artifactName.Contains('..')
+            if ($unsafeName) {
+              throw "Generated update contains an unsafe artifact name: $artifactName"
             }
             if (-not $artifactNames.Add([string]$artifact.name)) {
               throw "Generated update contains duplicate artifact name: $($artifact.name)"
             }
-            if (-not ([string]$artifact.downloadUri).StartsWith('https://', [StringComparison]::OrdinalIgnoreCase)
-                -or [int64]$artifact.length -le 0
-                -or [string]$artifact.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
-              throw "Generated update contains an invalid artifact contract: $($artifact.name)"
+            $downloadUri = [string]$artifact.downloadUri
+            $sha256 = [string]$artifact.sha256
+            $invalidArtifact = -not $downloadUri.StartsWith('https://', [StringComparison]::OrdinalIgnoreCase) -or [int64]$artifact.length -le 0 -or $sha256 -notmatch '^[0-9a-fA-F]{64}$'
+            if ($invalidArtifact) {
+              throw "Generated update contains an invalid artifact contract: $artifactName"
             }
           }
         }
