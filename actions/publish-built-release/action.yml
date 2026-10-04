@@ -108,9 +108,17 @@ runs:
               'androidapk' { '.apk' }
               default { throw "Unsupported update artifact kind: $kind" }
             }
-            $prefixes = @($group.Group | ForEach-Object {
-              if ($_.artifact_prefix) { [string]$_.artifact_prefix } else { [string]$_.key }
-            })
+            $prefixes = @(
+              $group.Group | ForEach-Object {
+                @(
+                  [string]$_.artifact_prefix,
+                  [string]$_.key,
+                  [string]$_.setup_base,
+                  [string]$_.linux_exe_name,
+                  [System.IO.Path]::GetFileNameWithoutExtension([string]$_.exe_name)
+                )
+              } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+            )
             $matches = @($staged | Where-Object {
               $name = Split-Path -Leaf $_
               $name.EndsWith($extension, [StringComparison]::OrdinalIgnoreCase) -and
@@ -120,7 +128,8 @@ runs:
                 }).Count -gt 0
             })
             if ($matches.Count -ne 1) {
-              throw "Expected one $kind asset for $appId, found $($matches.Count)."
+              $found = ($matches | ForEach-Object { Split-Path -Leaf $_ }) -join ', '
+              throw "Expected one $kind asset for $appId, found $($matches.Count): $found"
             }
             $path = $matches[0]
             $name = Split-Path -Leaf $path
