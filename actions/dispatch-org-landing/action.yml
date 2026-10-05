@@ -2,7 +2,7 @@ name: dispatch-org-landing
 description: Ask the org docs site to refresh release status after this workflow finishes.
 inputs:
   token:
-    description: Token with Actions write on the site repo. Empty skips the dispatch.
+    description: Org secret NOVOLIS_LANDING_TOKEN — OpenSSH deploy key (write on the site repo) or a PAT with Actions write. Empty skips the dispatch.
     required: false
     default: ''
   site-repo:
@@ -22,9 +22,27 @@ runs:
       run: |
         set -euo pipefail
         if [ -z "${TOKEN}" ]; then
-          echo "::warning title=Org landing::No landing token. Set the org secret NOVOLIS_LANDING_TOKEN (Actions write on ${SITE_REPO}) so this run can refresh the docs home."
+          echo "::warning title=Org landing::No landing token. Set the org secret NOVOLIS_LANDING_TOKEN (write deploy key on ${SITE_REPO}) so this run can refresh the docs home."
           exit 0
         fi
+
+        if printf '%s' "$TOKEN" | grep -q 'BEGIN .*PRIVATE KEY'; then
+          key="$RUNNER_TEMP/novolis-landing-dispatch"
+          printf '%s' "$TOKEN" | tr -d '\r' > "$key"
+          printf '\n' >> "$key"
+          chmod 600 "$key"
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          work="$RUNNER_TEMP/novolis-landing-site"
+          git clone --depth 1 --branch landing-refresh "git@github.com:${SITE_REPO}.git" "$work"
+          git -C "$work" config user.name 'github-actions[bot]'
+          git -C "$work" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C "$work" commit --allow-empty -m "landing-status ${SOURCE}"
+          git -C "$work" push origin landing-refresh
+          rm -f "$key"
+          echo "Pushed landing-refresh on ${SITE_REPO} for ${SOURCE}"
+          exit 0
+        fi
+
         GH_TOKEN="$TOKEN" gh api --method POST "repos/${SITE_REPO}/dispatches" \
           -f event_type=landing-status \
           -f "client_payload[repository]=${SOURCE}" \
