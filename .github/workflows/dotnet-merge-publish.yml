@@ -117,20 +117,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: $/actions/read-version
+      - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
         id: ver
         with:
           version-file: ${{ inputs.version-file }}
           build-number: ${{ github.run_number }}
 
-      - uses: $/actions/dotnet-build
+      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           packages_token: ${{ github.token }}
           # Fail before pack/publish: tests + doc-audit inside this action.
           run_tests: true
 
-      - uses: $/actions/dotnet-pack-versioned
+      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
         if: needs.detect.outputs.run_publish == 'true'
         with:
           package-version: ${{ steps.ver.outputs['package-version'] }}
@@ -138,7 +138,7 @@ jobs:
           file-version: ${{ steps.ver.outputs['file-version'] }}
           informational-version: ${{ steps.ver.outputs['package-version'] }}
 
-      - uses: $/actions/publish-github-packages
+      - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
         if: needs.detect.outputs.run_publish == 'true'
 
       # nuget.org login must run in the caller workflow. NuGet matches job_workflow_ref
@@ -155,6 +155,6 @@ jobs:
     if: always() && needs.detect.outputs.run_ci == 'true' && needs.ci.result != 'skipped'
     runs-on: ubuntu-latest
     steps:
-      - uses: $/actions/dispatch-org-landing
+      - uses: Novolis-Platform/novolis-workflows/actions/dispatch-org-landing@main
         with:
           token: ${{ secrets.NOVOLIS_LANDING_TOKEN != '' && secrets.NOVOLIS_LANDING_TOKEN || secrets.NOVOLIS_GPR_TOKEN }}

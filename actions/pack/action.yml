@@ -12,13 +12,13 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: $/actions/read-version
+    - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
       id: ver
       with:
         version-file: ${{ inputs.version-file }}
         build-number: ${{ github.run_number }}
 
-    - uses: $/actions/dotnet-pack-versioned
+    - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
       with:
         package-version: ${{ inputs.version != '' && inputs.version || steps.ver.outputs['package-version'] }}
         assembly-version: ${{ steps.ver.outputs['assembly-version'] }}

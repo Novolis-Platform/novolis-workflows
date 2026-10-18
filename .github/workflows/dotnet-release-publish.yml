@@ -25,34 +25,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: $/actions/resolve-release-version
+      - uses: Novolis-Platform/novolis-workflows/actions/resolve-release-version@main
         id: tag
         with:
           version-file: ${{ inputs.version-file }}
 
-      - uses: $/actions/read-version
+      - uses: Novolis-Platform/novolis-workflows/actions/read-version@main
         id: ver
         with:
           version-file: ${{ inputs.version-file }}
           build-number: ${{ github.run_number }}
 
-      - uses: $/actions/dotnet-build
+      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-build@main
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           packages_token: ${{ github.token }}
           run_tests: false
 
-      - uses: $/actions/dotnet-pack-versioned
+      - uses: Novolis-Platform/novolis-workflows/actions/dotnet-pack-versioned@main
         with:
           package-version: ${{ steps.ver.outputs['package-version'] }}
           assembly-version: ${{ steps.ver.outputs['assembly-version'] }}
           file-version: ${{ steps.ver.outputs['file-version'] }}
           informational-version: ${{ steps.ver.outputs['package-version'] }}
 
-      - uses: $/actions/publish-github-packages
-
-      - uses: $/actions/upload-release-packages
-
+      - uses: Novolis-Platform/novolis-workflows/actions/publish-github-packages@main
+      - uses: Novolis-Platform/novolis-workflows/actions/upload-release-packages@main
       - id: packed
         shell: bash
         run: echo "ok=true" >> "$GITHUB_OUTPUT"

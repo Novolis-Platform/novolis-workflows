@@ -28,8 +28,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: $/actions/checkout-sibling-repos
-
+    - uses: Novolis-Platform/novolis-workflows/actions/checkout-sibling-repos@main
     - name: Materialize Git LFS objects
       shell: bash
       run: |
@@ -50,7 +49,7 @@ runs:
       env:
         GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
 
-    - uses: $/actions/setup-dotnet
+    - uses: Novolis-Platform/novolis-workflows/actions/setup-dotnet@main
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
@@ -63,7 +62,7 @@ runs:
           dotnet workload install android
         fi
 
-    - uses: $/actions/authenticate-github-packages
+    - uses: Novolis-Platform/novolis-workflows/actions/authenticate-github-packages@main
       with:
         token: ${{ inputs.packages_token != '' && inputs.packages_token || github.token }}
 
