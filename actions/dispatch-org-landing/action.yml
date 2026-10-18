@@ -33,13 +33,22 @@ runs:
           chmod 600 "$key"
           export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
           work="$RUNNER_TEMP/novolis-landing-site"
-          git clone --depth 1 --branch landing-refresh "git@github.com:${SITE_REPO}.git" "$work"
-          git -C "$work" config user.name 'github-actions[bot]'
-          git -C "$work" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git -C "$work" commit --allow-empty -m "landing-status ${SOURCE}"
-          git -C "$work" push origin landing-refresh
+          for attempt in 1 2 3 4 5; do
+            rm -rf "$work"
+            if git clone --depth 1 --branch landing-refresh "git@github.com:${SITE_REPO}.git" "$work" \
+              && git -C "$work" config user.name 'github-actions[bot]' \
+              && git -C "$work" config user.email '41898282+github-actions[bot]@users.noreply.github.com' \
+              && git -C "$work" commit --allow-empty -m "landing-status ${SOURCE}" \
+              && git -C "$work" push origin landing-refresh; then
+              rm -f "$key"
+              echo "Pushed landing-refresh on ${SITE_REPO} for ${SOURCE}"
+              exit 0
+            fi
+            echo "::warning title=Org landing::landing-refresh changed while dispatching ${SOURCE}; retry ${attempt}/5."
+            sleep $((attempt * 2))
+          done
           rm -f "$key"
-          echo "Pushed landing-refresh on ${SITE_REPO} for ${SOURCE}"
+          echo "::warning title=Org landing::Could not push landing-refresh on ${SITE_REPO} after five retries."
           exit 0
         fi
 
