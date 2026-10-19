@@ -53,10 +53,54 @@ jobs:
             jq -r '.include[] | "| \(.channel) | \(.key) |"' /tmp/release-matrix.json
           } >> "$GITHUB_STEP_SUMMARY"
 
+  signing_preflight:
+    name: signing preflight / ${{ matrix.key }}
+    needs: plan
+    if: needs.plan.outputs.android_matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.android_matrix) }}
+    steps:
+      - name: Verify persistent signing inputs
+        shell: pwsh
+        env:
+          SIGNING_SECRET_KEY: ${{ matrix.signing_secret_key }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets[format('{0}_KEYSTORE_BASE64', matrix.signing_secret_key)] }}
+          ANDROID_KEY_ALIAS: ${{ secrets[format('{0}_KEY_ALIAS', matrix.signing_secret_key)] }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets[format('{0}_KEYSTORE_PASSWORD', matrix.signing_secret_key)] }}
+          ANDROID_KEY_PASSWORD: ${{ secrets[format('{0}_KEY_PASSWORD', matrix.signing_secret_key)] }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $missing = [System.Collections.Generic.List[string]]::new()
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_SECRET_KEY)) {
+            $missing.Add('android.signingSecretKey')
+          }
+          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_BASE64)) {
+            $missing.Add("${env:SIGNING_SECRET_KEY}_KEYSTORE_BASE64")
+          }
+          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEY_ALIAS)) {
+            $missing.Add("${env:SIGNING_SECRET_KEY}_KEY_ALIAS")
+          }
+          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_PASSWORD)) {
+            $missing.Add("${env:SIGNING_SECRET_KEY}_KEYSTORE_PASSWORD")
+          }
+          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASSWORD)) {
+            $missing.Add("${env:SIGNING_SECRET_KEY}_KEY_PASSWORD")
+          }
+          if ($missing.Count -gt 0) {
+            throw "Android release signing inputs are not configured for ${{ matrix.key }}: $($missing -join ', ')"
+          }
+          Write-Host "Android signing inputs are configured for ${{ matrix.key }}."
+
   windows-inno:
     name: windows-inno / ${{ matrix.key }}
-    needs: plan
-    if: needs.plan.outputs.windows_matrix != '[]'
+    needs: [plan, signing_preflight]
+    if: >-
+      always() &&
+      needs.plan.outputs.windows_matrix != '[]' &&
+      (needs.signing_preflight.result == 'success' || needs.signing_preflight.result == 'skipped')
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -103,8 +147,11 @@ jobs:
 
   linux-tar:
     name: linux-tar / ${{ matrix.key }}
-    needs: plan
-    if: needs.plan.outputs.linux_matrix != '[]'
+    needs: [plan, signing_preflight]
+    if: >-
+      always() &&
+      needs.plan.outputs.linux_matrix != '[]' &&
+      (needs.signing_preflight.result == 'success' || needs.signing_preflight.result == 'skipped')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -148,8 +195,11 @@ jobs:
 
   android-apk:
     name: android-apk / ${{ matrix.key }}
-    needs: plan
-    if: needs.plan.outputs.android_matrix != '[]'
+    needs: [plan, signing_preflight]
+    if: >-
+      always() &&
+      needs.plan.outputs.android_matrix != '[]' &&
+      needs.signing_preflight.result == 'success'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -208,10 +258,119 @@ jobs:
           path: artifacts/${{ matrix.key }}/android/*.apk
           if-no-files-found: error
 
+  validate_release:
+    name: Validate release artifacts
+    needs: [plan, signing_preflight, windows-inno, linux-tar, android-apk]
+    if: >-
+      always() &&
+      needs.plan.result == 'success' &&
+      (needs.signing_preflight.result == 'success' || needs.signing_preflight.result == 'skipped') &&
+      (needs.windows-inno.result == 'success' || needs.windows-inno.result == 'skipped') &&
+      (needs.linux-tar.result == 'success' || needs.linux-tar.result == 'skipped') &&
+      (needs.android-apk.result == 'success' || needs.android-apk.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/download
+      - name: Verify every declared artifact is present
+        shell: pwsh
+        env:
+          RELEASE_MATRIX: ${{ needs.plan.outputs.release_matrix }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $metadata = $env:RELEASE_MATRIX | ConvertFrom-Json
+          $rows = @($metadata.include)
+          if ($rows.Count -eq 0) {
+            throw 'Release matrix contains no applications.'
+          }
+
+          $source = Join-Path $env:GITHUB_WORKSPACE 'artifacts/download'
+          $assets = @(
+            Get-ChildItem -LiteralPath $source -Recurse -File |
+              Where-Object {
+                $_.Extension -in @('.zip', '.exe', '.apk') -or
+                $_.Name.EndsWith('.tar.gz', [StringComparison]::OrdinalIgnoreCase)
+              }
+          )
+          if ($assets.Count -eq 0) {
+            throw "No release assets were downloaded under $source."
+          }
+
+          $used = [System.Collections.Generic.HashSet[string]]::new(
+            [StringComparer]::OrdinalIgnoreCase)
+          $expected = 0
+          foreach ($row in $rows) {
+            $prefixes = @(
+              [string]$row.artifact_prefix
+              [string]$row.key
+              [string]$row.setup_base
+              [string]$row.linux_exe_name
+              [IO.Path]::GetFileNameWithoutExtension([string]$row.exe_name)
+            ) |
+              Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+              Select-Object -Unique
+
+            foreach ($kind in @($row.declared_update_artifacts)) {
+              $extension = switch ([string]$kind) {
+                'windowsInstaller' { '.exe' }
+                'windowsPortable' { '.zip' }
+                'linuxTarGz' { '.tar.gz' }
+                'androidApk' { '.apk' }
+                default { throw "Unsupported update artifact kind: $kind" }
+              }
+
+              $matches = @(
+                $assets | Where-Object {
+                  if ($used.Contains($_.FullName)) {
+                    return $false
+                  }
+                  $name = $_.Name
+                  $extensionMatches = if ($extension -eq '.tar.gz') {
+                    $name.EndsWith($extension, [StringComparison]::OrdinalIgnoreCase)
+                  }
+                  else {
+                    $_.Extension.Equals($extension, [StringComparison]::OrdinalIgnoreCase)
+                  }
+                  $prefixMatches = @(
+                    $prefixes | Where-Object {
+                      $name.StartsWith(
+                        [string]$_,
+                        [StringComparison]::OrdinalIgnoreCase) -or
+                      $name.Contains(
+                        [string]$_,
+                        [StringComparison]::OrdinalIgnoreCase)
+                    }
+                  )
+                  return $extensionMatches -and $prefixMatches.Count -gt 0
+                }
+              )
+              if ($matches.Count -ne 1) {
+                $found = ($matches | ForEach-Object Name) -join ', '
+                throw "Expected one $kind asset for $($row.key), found $($matches.Count): $found"
+              }
+              if (-not $used.Add($matches[0].FullName)) {
+                throw "Release asset was matched more than once: $($matches[0].Name)"
+              }
+              $expected++
+            }
+          }
+
+          if ($used.Count -ne $assets.Count) {
+            $unexpected = ($assets |
+              Where-Object { -not $used.Contains($_.FullName) } |
+              ForEach-Object Name) -join ', '
+            throw "Downloaded release contains unaccounted assets: $unexpected"
+          }
+          Write-Host "Validated $expected declared release assets for $($rows.Count) application-channel rows."
+
   publish-release:
     name: Publish release
-    needs: [plan, windows-inno, linux-tar, android-apk]
-    if: always() && needs.plan.result == 'success' && (needs.windows-inno.result == 'success' || needs.windows-inno.result == 'skipped') && (needs.linux-tar.result == 'success' || needs.linux-tar.result == 'skipped') && (needs.android-apk.result == 'success' || needs.android-apk.result == 'skipped') && (needs.windows-inno.result == 'success' || needs.linux-tar.result == 'success' || needs.android-apk.result == 'success')
+    needs: [plan, signing_preflight, windows-inno, linux-tar, android-apk, validate_release]
+    if: >-
+      always() &&
+      needs.plan.result == 'success' &&
+      needs.validate_release.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -237,9 +396,11 @@ jobs:
           title: App release
           jobs: |
             plan=${{ needs.plan.result }}
+            signing-preflight=${{ needs.signing_preflight.result }}
             windows-inno=${{ needs.windows-inno.result }}
             linux-tar=${{ needs.linux-tar.result }}
             android-apk=${{ needs.android-apk.result }}
+            validate-release=${{ needs.validate_release.result }}
             publish=${{ needs.publish-release.result }}
       - uses: Novolis-Platform/novolis-workflows/actions/dispatch-org-landing@main
         if: always()
