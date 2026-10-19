@@ -387,7 +387,7 @@ jobs:
 
   result:
     name: Result
-    needs: [plan, windows-inno, linux-tar, android-apk, publish-release]
+    needs: [plan, signing_preflight, windows-inno, linux-tar, android-apk, validate_release, publish-release]
     if: always()
     runs-on: ubuntu-latest
     steps:
