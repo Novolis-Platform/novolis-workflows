@@ -67,6 +67,7 @@ jobs:
         shell: pwsh
         env:
           SIGNING_SECRET_KEY: ${{ matrix.signing_secret_key }}
+          ALLOW_ADHOC_SIGNING: ${{ matrix.allow_adhoc_signing }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets[format('{0}_KEYSTORE_BASE64', matrix.signing_secret_key)] }}
           ANDROID_KEY_ALIAS: ${{ secrets[format('{0}_KEY_ALIAS', matrix.signing_secret_key)] }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets[format('{0}_KEYSTORE_PASSWORD', matrix.signing_secret_key)] }}
@@ -89,10 +90,18 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASSWORD)) {
             $missing.Add("${env:SIGNING_SECRET_KEY}_KEY_PASSWORD")
           }
-          if ($missing.Count -gt 0) {
+          if ($missing -contains 'android.signingSecretKey') {
             throw "Android release signing inputs are not configured for ${{ matrix.key }}: $($missing -join ', ')"
           }
-          Write-Host "Android signing inputs are configured for ${{ matrix.key }}."
+          $secretMissing = @($missing | Where-Object { $_ -ne 'android.signingSecretKey' })
+          if ($secretMissing.Count -gt 0 -and $env:ALLOW_ADHOC_SIGNING -ne 'true') {
+            throw "Android release signing inputs are not configured for ${{ matrix.key }}: $($secretMissing -join ', ')"
+          }
+          if ($secretMissing.Count -gt 0) {
+            Write-Warning "Persistent Android signing inputs are absent for ${{ matrix.key }}; the explicitly opted-in adhoc sideload key will be generated."
+          } else {
+            Write-Host "Android signing inputs are configured for ${{ matrix.key }}."
+          }
 
   windows-inno:
     name: windows-inno / ${{ matrix.key }}
@@ -231,6 +240,7 @@ jobs:
         shell: pwsh
         env:
           PACKAGE_VERSION: ${{ needs.plan.outputs.package_version }}
+          ALLOW_ADHOC_SIGNING: ${{ matrix.allow_adhoc_signing }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets[format('{0}_KEYSTORE_BASE64', matrix.signing_secret_key)] }}
           ANDROID_KEY_ALIAS: ${{ secrets[format('{0}_KEY_ALIAS', matrix.signing_secret_key)] }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets[format('{0}_KEYSTORE_PASSWORD', matrix.signing_secret_key)] }}
@@ -242,12 +252,17 @@ jobs:
           . ./scripts/Publish-NovolisApp.ps1
           $keyStore = Join-Path $env:RUNNER_TEMP 'novolis-android.keystore'
           $hasKey = $env:ANDROID_KEYSTORE_BASE64 -and $env:ANDROID_KEY_ALIAS -and $env:ANDROID_KEYSTORE_PASSWORD -and $env:ANDROID_KEY_PASSWORD
-          if (-not $hasKey) {
+          if (-not $hasKey -and $env:ALLOW_ADHOC_SIGNING -ne 'true') {
             Write-Host '::error title=android-apk / ${{ matrix.key }}::Signing secrets for ${{ matrix.signing_secret_key }} are not set'
             exit 1
           }
-          [IO.File]::WriteAllBytes($keyStore, [Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64))
-          $item = Publish-NovolisAndroidApk -RepoRoot $env:GITHUB_WORKSPACE -AppKey '${{ matrix.key }}' -PackageVersion $env:PACKAGE_VERSION -RunNumber ([int]$env:RUN_NUMBER) -KeystorePath $keyStore -KeyAlias $env:ANDROID_KEY_ALIAS -KeystorePassword $env:ANDROID_KEYSTORE_PASSWORD -KeyPassword $env:ANDROID_KEY_PASSWORD
+          if ($hasKey) {
+            [IO.File]::WriteAllBytes($keyStore, [Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64))
+            $item = Publish-NovolisAndroidApk -RepoRoot $env:GITHUB_WORKSPACE -AppKey '${{ matrix.key }}' -PackageVersion $env:PACKAGE_VERSION -RunNumber ([int]$env:RUN_NUMBER) -KeystorePath $keyStore -KeyAlias $env:ANDROID_KEY_ALIAS -KeystorePassword $env:ANDROID_KEYSTORE_PASSWORD -KeyPassword $env:ANDROID_KEY_PASSWORD
+          } else {
+            Write-Warning "Publishing explicitly opted-in adhoc sideload APK for ${{ matrix.key }}. This certificate is not upgrade-safe."
+            $item = Publish-NovolisAndroidApk -RepoRoot $env:GITHUB_WORKSPACE -AppKey '${{ matrix.key }}' -PackageVersion $env:PACKAGE_VERSION -RunNumber ([int]$env:RUN_NUMBER)
+          }
           if (-not $item) {
             Write-Host '::error title=android-apk / ${{ matrix.key }}::APK publish failed'
             exit 1
