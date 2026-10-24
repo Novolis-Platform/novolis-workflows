@@ -1,5 +1,5 @@
 name: publish-built-release
-description: Hash the installers built in this run and publish them as one GitHub Release, then keep the newest tags.
+description: Hash every release artifact built in this run and publish them as one GitHub Release, then keep the newest tags.
 inputs:
   tag:
     description: Release tag, for example v2026.1.0.45
@@ -28,7 +28,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Publish built installers
+    - name: Publish built release artifacts
       shell: pwsh
       env:
         TAG: ${{ inputs.tag }}
@@ -83,7 +83,10 @@ runs:
         $repositoryUri = "https://github.com/$env:REPO"
         $releaseTime = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
         $updates = [System.Collections.Generic.List[object]]::new()
-        $groups = $rows | Group-Object update_app_id, update_channel
+        $updateRows = @($rows | Where-Object {
+          $null -eq $_.update_enabled -or $_.update_enabled -eq $true
+        })
+        $groups = $updateRows | Group-Object update_app_id, update_channel
         foreach ($group in $groups) {
           $first = $group.Group[0]
           $appId = [string]$first.update_app_id
